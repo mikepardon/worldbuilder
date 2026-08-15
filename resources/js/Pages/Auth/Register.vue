@@ -6,6 +6,10 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 
+defineProps({
+    intendedPlan: { type: Object, default: undefined },
+});
+
 const form = useForm({
     name: '',
     email: '',
@@ -23,6 +27,15 @@ const submit = () => {
 <template>
     <GuestLayout>
         <Head title="Register" />
+
+        <div
+            v-if="intendedPlan"
+            class="mb-6 rounded-md border border-amber/40 bg-amber/10 px-4 py-3 text-sm text-ink"
+        >
+            Creating your account for the
+            <span class="font-medium text-amber">{{ intendedPlan.name }}</span>
+            plan — you can confirm and pay after signing up.
+        </div>
 
         <form @submit.prevent="submit">
             <div>

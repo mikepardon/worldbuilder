@@ -6,6 +6,7 @@ namespace App\Services\Billing;
 
 use App\Models\ProcessedCheckout;
 use App\Models\User;
+use App\Support\Plans;
 
 /**
  * Applies normalised billing events to users. Shared by the webhook and the on-return confirmation,
@@ -20,8 +21,39 @@ class BillingFulfilment
             BillingEvent::CHECKOUT_COMPLETED => $this->applyCheckout($event),
             BillingEvent::SUBSCRIPTION_UPDATED => $this->applyUpdate($event),
             BillingEvent::SUBSCRIPTION_DELETED => $this->applyCancellation($event),
+            BillingEvent::SUBSCRIPTION_RENEWED => $this->applyRenewal($event),
             default => null,
         };
+    }
+
+    /**
+     * A subscription invoice was paid (first payment or a renewal): grant the plan's monthly credit
+     * allotment to the top-up balance. Guarded by the invoice id so a cycle is never granted twice, even
+     * if Stripe re-delivers the webhook. Daily free credits are still spent before this balance.
+     */
+    private function applyRenewal(BillingEvent $event): void
+    {
+        $user = $this->userByStripeIds($event);
+        if ($user === null) {
+            return;
+        }
+
+        // Claim this invoice; a re-delivered webhook finds it already recorded and stops here.
+        if (filled($event->checkoutId)) {
+            $claim = ProcessedCheckout::firstOrCreate(['checkout_id' => $event->checkoutId]);
+            if (! $claim->wasRecentlyCreated) {
+                return;
+            }
+        }
+
+        $plan = filled($event->plan) ? $event->plan : (is_string($user->plan) ? $user->plan : 'free');
+        $monthlyCredits = (int) (Plans::for($plan)['monthly_credits'] ?? 0);
+        if ($monthlyCredits <= 0) {
+            return;
+        }
+
+        $user->ai_credit_balance = (int) $user->ai_credit_balance + $monthlyCredits;
+        $user->save();
     }
 
     /**

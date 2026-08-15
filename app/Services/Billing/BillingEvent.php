@@ -16,6 +16,10 @@ final readonly class BillingEvent
 
     public const SUBSCRIPTION_DELETED = 'customer.subscription.deleted';
 
+    // A subscription invoice was paid — fires for the first payment and every renewal, so it's where the
+    // plan's monthly credit allotment is granted (once per invoice, guarded by the invoice id).
+    public const SUBSCRIPTION_RENEWED = 'invoice.paid';
+
     public function __construct(
         public string $type,
         public ?int $userId = null,

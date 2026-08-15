@@ -175,6 +175,51 @@ class StripeBillingTest extends TestCase
         $this->assertSame('sub_1', $fresh->stripe_subscription_id);
     }
 
+    public function test_a_paid_invoice_grants_the_plans_monthly_credits(): void
+    {
+        $user = User::factory()->create(['plan' => 'basic', 'ai_credit_balance' => 10]);
+        $user->stripe_customer_id = 'cus_r';
+        $user->save();
+
+        $this->mock(BillingGateway::class, function ($mock) {
+            $mock->shouldReceive('webhookEvent')->once()->andReturn(new BillingEvent(
+                type: BillingEvent::SUBSCRIPTION_RENEWED,
+                plan: 'basic',
+                customerId: 'cus_r',
+                subscriptionId: 'sub_r',
+                checkoutId: 'in_month1',
+            ));
+        });
+
+        $this->post(route('stripe.webhook'), [], ['Stripe-Signature' => 'sig'])->assertNoContent();
+
+        // Basic grants 300 credits per cycle on top of the existing balance.
+        $this->assertSame(310, $user->fresh()->ai_credit_balance);
+    }
+
+    public function test_monthly_credits_are_granted_only_once_per_invoice(): void
+    {
+        $user = User::factory()->create(['plan' => 'pro', 'ai_credit_balance' => 0]);
+        $user->stripe_customer_id = 'cus_p2';
+        $user->save();
+
+        $this->mock(BillingGateway::class, function ($mock) {
+            $mock->shouldReceive('webhookEvent')->andReturn(new BillingEvent(
+                type: BillingEvent::SUBSCRIPTION_RENEWED,
+                plan: 'pro',
+                customerId: 'cus_p2',
+                subscriptionId: 'sub_p2',
+                checkoutId: 'in_dup',
+            ));
+        });
+
+        // A re-delivered invoice webhook must not grant Pro's 1000 credits twice.
+        $this->post(route('stripe.webhook'), [], ['Stripe-Signature' => 'sig'])->assertNoContent();
+        $this->post(route('stripe.webhook'), [], ['Stripe-Signature' => 'sig'])->assertNoContent();
+
+        $this->assertSame(1000, $user->fresh()->ai_credit_balance);
+    }
+
     public function test_a_subscription_deleted_webhook_drops_the_user_to_free(): void
     {
         $user = User::factory()->create(['plan' => 'pro']);

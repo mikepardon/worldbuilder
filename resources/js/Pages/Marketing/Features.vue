@@ -1,6 +1,7 @@
 <script setup>
 import { Head, Link } from '@inertiajs/vue3';
 import MarketingShell from '@/Components/MarketingShell.vue';
+import MarketingCta from '@/Components/MarketingCta.vue';
 
 defineProps({
     canLogin: Boolean,
@@ -12,6 +13,7 @@ const sections = [
         eyebrow: 'The world',
         title: 'A canon that holds together',
         body: 'Every location, person, faction, event and scrap of lore lives as a linked entry. Cross-reference anything, and Worldbuilder keeps the connections in step — rename a city and every mention follows.',
+        route: 'marketing.features.worldbuilding',
         points: [
             'Locations, people, factions, timelines and lore as first-class entry types',
             'Custom fields and quick-facts tailored to each world',
@@ -23,6 +25,7 @@ const sections = [
         eyebrow: 'The table',
         title: 'Run campaigns without leaving your world',
         body: 'One world can host many campaigns, all drawing on the same canon. Plan sessions, track what your players have uncovered, and drop into a live virtual tabletop when the dice come out.',
+        route: 'marketing.features.vtt',
         points: [
             'Battle maps with tokens, fog of war and initiative tracking',
             'Real-time rooms so your table shares one board',
@@ -34,6 +37,7 @@ const sections = [
         eyebrow: 'The rules',
         title: 'A compendium built in',
         body: 'Monsters, spells, items and stat blocks are searchable, filterable and ready to use. Embed a monster in an entry, or drop it onto a battle map as a live token — no flipping through PDFs.',
+        route: 'marketing.features.compendium',
         points: [
             'Searchable compendium of monsters, spells and items',
             'Import from open SRD sources so your reference stays current',
@@ -45,6 +49,7 @@ const sections = [
         eyebrow: 'The reveal',
         title: 'Publish exactly what your players should see',
         body: 'Every world can publish a beautiful, read-only player site. You decide what is visible and what stays GM-only, so secrets hold until the moment you choose to reveal them.',
+        route: 'marketing.features.publishing',
         points: [
             'Per-entry visibility — GM-only until you publish',
             'A polished, searchable reader for your players',
@@ -56,6 +61,7 @@ const sections = [
         eyebrow: 'The assistant',
         title: 'AI that helps you write, not decide',
         body: 'Draft an entry, expand a stub, or turn rough session notes into a polished recap. The assistant works from your canon and stays out of the way — every account gets free credits each day.',
+        route: 'marketing.features.ai',
         points: [
             'Draft and expand entries in your world’s voice',
             'Turn raw session notes into shareable recaps',
@@ -91,6 +97,9 @@ const sections = [
                     <div class="font-mono text-xs uppercase tracking-[0.3em] text-[#6fbfc4]">{{ feature.eyebrow }}</div>
                     <h2 class="mt-4 font-display text-3xl text-[#f3efe6]">{{ feature.title }}</h2>
                     <p class="mt-4 text-base leading-relaxed text-[#b8bcc4]">{{ feature.body }}</p>
+                    <Link :href="route(feature.route)" class="mt-5 inline-flex items-center gap-1 text-sm text-[#6fbfc4] hover:text-[#8fd3d7]">
+                        Explore {{ feature.eyebrow.replace('The ', '') }} →
+                    </Link>
                 </div>
                 <ul :class="index % 2 === 1 ? 'md:order-1' : ''" class="space-y-3 rounded-xl border border-[#262a33] bg-[#14171d] p-6">
                     <li
@@ -105,26 +114,14 @@ const sections = [
             </div>
         </section>
 
-        <section class="mx-auto max-w-4xl px-6 py-24 text-center">
-            <h2 class="font-display text-3xl text-[#f5f1e8]">See it with your own world</h2>
-            <p class="mx-auto mt-3 max-w-xl text-[#b8bcc4]">
-                Start free — build a world, invite your table, and publish when you are ready.
-            </p>
-            <div class="mt-8 flex justify-center gap-3">
-                <Link
-                    v-if="canRegister"
-                    :href="route('register')"
-                    class="rounded-md bg-amber-600 px-6 py-3 font-medium text-white hover:bg-amber-700"
-                >
-                    Create your world
-                </Link>
-                <Link
-                    :href="route('marketing.how')"
-                    class="rounded-md border border-[#2e323c] px-6 py-3 text-[#c8ccd3] hover:border-[#6fbfc4]"
-                >
-                    How it works
-                </Link>
-            </div>
-        </section>
+        <div class="border-t border-[#1e222a]">
+            <MarketingCta
+                :can-register="canRegister"
+                title="See it with your own world"
+                text="Start free — build a world, invite your table, and publish when you are ready."
+                secondary-label="See use cases"
+                secondary-route="marketing.use-cases"
+            />
+        </div>
     </MarketingShell>
 </template>

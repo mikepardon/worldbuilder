@@ -1,5 +1,6 @@
 <script setup>
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import MarketingShell from '@/Components/MarketingShell.vue';
 
 const { plans = [] } = defineProps({
@@ -10,10 +11,27 @@ const { plans = [] } = defineProps({
 
 const featured = 'basic';
 
+const user = computed(() => usePage().props.auth?.user);
+
+// Where each plan's button goes. Guests start the register flow (a paid plan is remembered so it can be
+// offered again after signup); signed-in users go to their billing page to change plan.
+function planCta(plan) {
+    if (user.value) {
+        return plan.is_free
+            ? { href: route('dashboard'), label: 'Go to dashboard' }
+            : { href: route('billing.index'), label: `Choose ${plan.name}` };
+    }
+
+    return plan.is_free
+        ? { href: route('register'), label: 'Get started free' }
+        : { href: route('register', { plan: plan.key }), label: 'Get started' };
+}
+
 function features(plan) {
     return [
         `${plan.worlds} ${plan.worlds === 1 ? 'world' : 'worlds'}`,
-        `${plan.daily_credits} AI credits / day`,
+        `${plan.daily_credits} free AI credits / day`,
+        ...(plan.monthly_credits > 0 ? [`+ ${plan.monthly_credits} AI credits / month`] : []),
         `${plan.storage_display} storage`,
         plan.custom_domain ? 'Custom domain' : 'Player-facing site',
     ];
@@ -69,20 +87,14 @@ function features(plan) {
 
                     <div class="mt-8 pt-2">
                         <Link
-                            v-if="plan.is_free"
-                            :href="route('register')"
-                            class="block rounded-md bg-amber-600 px-4 py-2.5 text-center font-medium text-white hover:bg-amber-700"
+                            :href="planCta(plan).href"
+                            class="block rounded-md px-4 py-2.5 text-center font-medium"
+                            :class="plan.is_free || plan.key === featured
+                                ? 'bg-amber-600 text-white hover:bg-amber-700'
+                                : 'border border-[#2e323c] text-[#c8ccd3] hover:border-[#6fbfc4]'"
                         >
-                            Get started free
+                            {{ planCta(plan).label }}
                         </Link>
-                        <button
-                            v-else
-                            type="button"
-                            disabled
-                            class="w-full cursor-not-allowed rounded-md border border-[#2e323c] px-4 py-2.5 text-center text-[#8a90a0]"
-                        >
-                            Coming soon
-                        </button>
                     </div>
                 </div>
             </div>

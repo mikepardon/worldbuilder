@@ -16,8 +16,9 @@ const user = computed(() => usePage().props.auth?.user);
             <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
                 <Link :href="route('home')" class="font-display text-xl text-amber">Worldbuilder</Link>
                 <nav class="flex items-center gap-5 text-sm">
-                    <Link :href="route('marketing.how')" class="text-[#9aa0ab] hover:text-[#e8e3d9]">How it works</Link>
-                    <Link :href="route('marketing.features')" class="text-[#9aa0ab] hover:text-[#e8e3d9]">Features</Link>
+                    <Link :href="route('marketing.features')" class="hidden text-[#9aa0ab] hover:text-[#e8e3d9] sm:inline">Features</Link>
+                    <Link :href="route('marketing.use-cases')" class="hidden text-[#9aa0ab] hover:text-[#e8e3d9] md:inline">Use cases</Link>
+                    <Link :href="route('marketing.how')" class="hidden text-[#9aa0ab] hover:text-[#e8e3d9] md:inline">How it works</Link>
                     <Link :href="route('marketing.pricing')" class="text-[#9aa0ab] hover:text-[#e8e3d9]">Pricing</Link>
                     <template v-if="user">
                         <Link
@@ -49,8 +50,11 @@ const user = computed(() => usePage().props.auth?.user);
             <div class="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-8 text-sm text-[#6f7580] sm:flex-row sm:items-center sm:justify-between">
                 <div class="font-display text-base text-[#9aa0ab]">Worldbuilder</div>
                 <nav class="flex flex-wrap gap-5">
-                    <Link :href="route('marketing.how')" class="hover:text-[#c8ccd3]">How it works</Link>
                     <Link :href="route('marketing.features')" class="hover:text-[#c8ccd3]">Features</Link>
+                    <Link :href="route('marketing.use-cases')" class="hover:text-[#c8ccd3]">Use cases</Link>
+                    <Link :href="route('marketing.examples')" class="hover:text-[#c8ccd3]">Examples</Link>
+                    <Link :href="route('marketing.compare')" class="hover:text-[#c8ccd3]">Compare</Link>
+                    <Link :href="route('marketing.how')" class="hover:text-[#c8ccd3]">How it works</Link>
                     <Link :href="route('marketing.pricing')" class="hover:text-[#c8ccd3]">Pricing</Link>
                     <Link :href="route('marketing.faq')" class="hover:text-[#c8ccd3]">FAQ</Link>
                     <Link v-if="user" :href="route('dashboard')" class="hover:text-[#c8ccd3]">My dashboard</Link>

@@ -84,7 +84,10 @@ const managePortal = () => {
 
 const features = (plan) => [
     `${plan.worlds} ${plan.worlds === 1 ? "world" : "worlds"}`,
-    `${plan.daily_credits} AI credits / day`,
+    `${plan.daily_credits} free AI credits / day`,
+    ...(plan.monthly_credits > 0
+        ? [`+ ${plan.monthly_credits} AI credits / month`]
+        : []),
     `${plan.storage_display} storage`,
     plan.custom_domain ? "Custom domain" : "Player-facing site",
 ];

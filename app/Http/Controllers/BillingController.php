@@ -91,6 +91,7 @@ class BillingController extends Controller
                 'price_display' => $this->priceDisplay((int) $plan['price']),
                 'is_free' => (int) $plan['price'] === 0,
                 'daily_credits' => (int) $plan['daily_credits'],
+                'monthly_credits' => (int) $plan['monthly_credits'],
                 'worlds' => (int) $plan['worlds'],
                 'storage_display' => $this->storageDisplay((float) $plan['storage_gb']),
                 'custom_domain' => (bool) $plan['custom_domain'],
@@ -112,6 +113,35 @@ class BillingController extends Controller
                 : null,
             // A scheduled downgrade that takes effect at the end of the paid period, if any.
             'pending' => $pending,
+        ]);
+    }
+
+    /**
+     * The post-registration interstitial: a new account that picked a paid plan lands here to confirm
+     * they want to continue to checkout, or start free for now. Only a real paid plan is offered.
+     */
+    public function start(Request $request): Response|HttpResponse
+    {
+        $plan = (string) $request->query('plan', '');
+        if (! Plans::isPlan($plan) || (int) Plans::for($plan)['price'] === 0) {
+            return redirect()->route('dashboard');
+        }
+
+        $config = Plans::for($plan);
+
+        return Inertia::render('Billing/GetStarted', [
+            'plan' => [
+                'key' => $plan,
+                'name' => (string) $config['name'],
+                'price_display' => $this->priceDisplay((int) $config['price']),
+                'monthly_credits' => (int) $config['monthly_credits'],
+                'worlds' => (int) $config['worlds'],
+                'storage_display' => $this->storageDisplay((float) $config['storage_gb']),
+                'custom_domain' => (bool) $config['custom_domain'],
+                'blurb' => (string) $config['blurb'],
+            ],
+            // Whether online payments are live yet — drives whether the "continue" button can charge.
+            'billingEnabled' => Billing::configured(),
         ]);
     }
 

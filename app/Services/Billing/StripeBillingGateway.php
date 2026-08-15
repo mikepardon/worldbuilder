@@ -208,6 +208,15 @@ class StripeBillingGateway implements BillingGateway
                 customerId: $this->stringOrNull($object->customer ?? null),
                 subscriptionId: $this->stringOrNull($object->id ?? null),
             ),
+            BillingEvent::SUBSCRIPTION_RENEWED => new BillingEvent(
+                type: $event->type,
+                // The plan is derived from the invoiced subscription's price; fulfilment grants its credits.
+                plan: Billing::planForPrice($object->lines->data[0]->price->id ?? null),
+                customerId: $this->stringOrNull($object->customer ?? null),
+                subscriptionId: $this->stringOrNull($object->subscription ?? null),
+                // The invoice id is the idempotency key so a cycle's credits are granted exactly once.
+                checkoutId: $this->stringOrNull($object->id ?? null),
+            ),
             default => new BillingEvent(type: $event->type),
         };
     }

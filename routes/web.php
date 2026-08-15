@@ -78,6 +78,14 @@ Route::get('/recap/{token}', [PublicRecapController::class, 'show'])->name('publ
 Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/how-it-works', [MarketingController::class, 'howItWorks'])->name('marketing.how');
 Route::get('/features', [MarketingController::class, 'features'])->name('marketing.features');
+Route::get('/features/worldbuilding', [MarketingController::class, 'featureWorldbuilding'])->name('marketing.features.worldbuilding');
+Route::get('/features/virtual-tabletop', [MarketingController::class, 'featureVirtualTabletop'])->name('marketing.features.vtt');
+Route::get('/features/compendium', [MarketingController::class, 'featureCompendium'])->name('marketing.features.compendium');
+Route::get('/features/publishing', [MarketingController::class, 'featurePublishing'])->name('marketing.features.publishing');
+Route::get('/features/ai', [MarketingController::class, 'featureAi'])->name('marketing.features.ai');
+Route::get('/use-cases', [MarketingController::class, 'useCases'])->name('marketing.use-cases');
+Route::get('/examples', [MarketingController::class, 'examples'])->name('marketing.examples');
+Route::get('/compare', [MarketingController::class, 'compare'])->name('marketing.compare');
 Route::get('/pricing', [MarketingController::class, 'pricing'])->name('marketing.pricing');
 Route::get('/faq', [MarketingController::class, 'faq'])->name('marketing.faq');
 Route::get('/llms.txt', LlmsController::class)->name('llms');
@@ -400,6 +408,8 @@ Route::middleware('auth')->group(function () {
 
     // A player's own billing: current plan, usage, and changing plan.
     Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');
+    // Post-registration "continue to your chosen plan?" interstitial.
+    Route::get('/billing/get-started', [BillingController::class, 'start'])->name('billing.start');
     Route::post('/billing/checkout', [BillingController::class, 'checkout'])->name('billing.checkout');
     Route::post('/billing/cancel-downgrade', [BillingController::class, 'cancelDowngrade'])->name('billing.cancel-downgrade');
     Route::post('/billing/top-up', [BillingController::class, 'topUp'])->name('billing.topup');

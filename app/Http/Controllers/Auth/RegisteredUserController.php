@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\CreditWeights;
+use App\Support\Plans;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,11 +19,21 @@ use Inertia\Response;
 class RegisteredUserController extends Controller
 {
     /**
-     * Display the registration view.
+     * Display the registration view. A `plan` query (set from the pricing page's paid tiers) is
+     * remembered in the session so the chosen plan can be offered again once the account exists.
      */
-    public function create(): Response
+    public function create(Request $request): Response
     {
-        return Inertia::render('Auth/Register');
+        $intendedPlan = $this->paidPlan((string) $request->query('plan', ''));
+        if ($intendedPlan !== null) {
+            $request->session()->put('intended_plan', $intendedPlan);
+        }
+
+        return Inertia::render('Auth/Register', [
+            'intendedPlan' => $intendedPlan !== null
+                ? ['key' => $intendedPlan, 'name' => (string) Plans::for($intendedPlan)['name']]
+                : null,
+        ]);
     }
 
     /**
@@ -50,6 +61,18 @@ class RegisteredUserController extends Controller
 
         Auth::login($user);
 
+        // If they arrived from a paid plan on the pricing page, offer to continue to it.
+        $intendedPlan = $this->paidPlan((string) $request->session()->pull('intended_plan', ''));
+        if ($intendedPlan !== null) {
+            return redirect()->route('billing.start', ['plan' => $intendedPlan]);
+        }
+
         return redirect(route('dashboard', absolute: false));
+    }
+
+    /** Normalise a plan key to a real, paid plan (basic/pro) or null — reject-by-default. */
+    private function paidPlan(string $plan): ?string
+    {
+        return Plans::isPlan($plan) && (int) Plans::for($plan)['price'] > 0 ? $plan : null;
     }
 }

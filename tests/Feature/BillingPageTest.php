@@ -16,6 +16,32 @@ class BillingPageTest extends TestCase
         $this->get(route('billing.index'))->assertRedirect(route('login'));
     }
 
+    public function test_the_get_started_interstitial_shows_the_chosen_paid_plan(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->get(route('billing.start', ['plan' => 'pro']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Billing/GetStarted')
+                ->where('plan.key', 'pro')
+                ->where('plan.name', 'Pro')
+                ->where('plan.monthly_credits', 1000));
+    }
+
+    public function test_the_get_started_interstitial_rejects_a_free_or_unknown_plan(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->get(route('billing.start', ['plan' => 'free']))
+            ->assertRedirect(route('dashboard'));
+    }
+
+    public function test_the_get_started_interstitial_requires_signing_in(): void
+    {
+        $this->get(route('billing.start', ['plan' => 'pro']))->assertRedirect(route('login'));
+    }
+
     public function test_it_shows_the_users_current_plan_and_usage(): void
     {
         $user = User::factory()->create([
