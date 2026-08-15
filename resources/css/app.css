@@ -1,0 +1,274 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    html {
+        background-color: #0e1014;
+    }
+    body {
+        @apply bg-night text-ink;
+    }
+}
+
+/* Responsive block visibility: a template block set to "desktop only" or "mobile only" hides on the
+   other breakpoint. `display: revert` restores the element's natural display (flex/grid/block). */
+.wb-only-mobile {
+    display: none;
+}
+@media (max-width: 640px) {
+    .wb-only-desktop {
+        display: none;
+    }
+    .wb-only-mobile {
+        display: revert;
+    }
+}
+
+/* Scroll without a visible scrollbar (used in modals/panels where the bar is just noise). */
+.no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+/* Reader accent theme: the public reader's teal accent is remapped to the world's chosen colour
+   via --reader-accent (set on [data-reader-theme] in PublicLayout). */
+[data-reader-theme] .text-teal,
+[data-reader-theme] .hover\:text-teal:hover,
+[data-reader-theme] .text-\[\#6fbfc4\],
+[data-reader-theme] .hover\:text-\[\#6fbfc4\]:hover {
+    color: var(--reader-accent, #6fbfc4);
+}
+[data-reader-theme] .border-teal,
+[data-reader-theme] .hover\:border-teal:hover,
+[data-reader-theme] .border-\[\#6fbfc4\],
+[data-reader-theme] .hover\:border-\[\#6fbfc4\]:hover {
+    border-color: var(--reader-accent, #6fbfc4);
+}
+[data-reader-theme] .bg-teal {
+    background-color: var(--reader-accent, #6fbfc4);
+}
+
+/* ---- Reader colour theming ------------------------------------------------
+   The public reader (.wb-reader / [data-reader-theme]) is themeable: the GM's chosen colours arrive as
+   CSS variables (set inline in PublicLayout) and the reader's palette classes are remapped onto them
+   here — so a world can restyle its whole reader without us rewriting every element. Unset variables
+   fall back to the app's built-in palette, so an unbranded world looks exactly as before. Scoped to the
+   reader only; the GM workspace keeps its own dark UI. */
+[data-reader-theme] {
+    --wb-bg: #0e1014;
+    --wb-heading: #f5f1e8;
+    --wb-text: #e8e3d9;
+    --wb-accent: var(--reader-accent, #6fbfc4);
+    /* Surfaces + secondary text are derived from the two base colours so they stay coherent whatever
+       background — light or dark — the GM picks. */
+    --wb-surface: color-mix(in srgb, var(--wb-bg), var(--wb-text) 6%);
+    --wb-raised: color-mix(in srgb, var(--wb-bg), var(--wb-text) 10%);
+    --wb-edge: color-mix(in srgb, var(--wb-bg), var(--wb-text) 16%);
+    --wb-muted: color-mix(in srgb, var(--wb-text), var(--wb-bg) 38%);
+    --wb-faint: color-mix(in srgb, var(--wb-text), var(--wb-bg) 58%);
+
+    background-color: var(--wb-bg);
+    color: var(--wb-text);
+}
+
+/* Backgrounds */
+[data-reader-theme] .bg-night {
+    background-color: var(--wb-bg);
+}
+[data-reader-theme] .bg-surface,
+[data-reader-theme] .bg-card,
+[data-reader-theme] .panel,
+[data-reader-theme] .card-link,
+[data-reader-theme] .bg-\[\#181b21\],
+[data-reader-theme] .bg-\[\#15181e\] {
+    background-color: var(--wb-surface);
+}
+[data-reader-theme] .bg-raised,
+[data-reader-theme] .bg-\[\#1c2027\],
+[data-reader-theme] .bg-\[\#242832\] {
+    background-color: var(--wb-raised);
+}
+
+/* Borders */
+[data-reader-theme] .border-edge,
+[data-reader-theme] .border-edge2,
+[data-reader-theme] .border-edge3,
+[data-reader-theme] .panel,
+[data-reader-theme] .card-link,
+[data-reader-theme] .border-\[\#262a33\],
+[data-reader-theme] .border-\[\#2e323c\],
+[data-reader-theme] .border-\[\#2b303a\],
+[data-reader-theme] .border-\[\#333844\],
+[data-reader-theme] .border-\[\#23272f\],
+[data-reader-theme] .border-\[\#22262e\],
+[data-reader-theme] .border-\[\#3d4250\],
+[data-reader-theme] .border-\[\#3a4150\] {
+    border-color: var(--wb-edge);
+}
+
+/* Headings + brightest text */
+[data-reader-theme] .text-bright,
+[data-reader-theme] .eyebrow,
+[data-reader-theme] .text-\[\#f5f1e8\],
+[data-reader-theme] .text-\[\#f3efe6\] {
+    color: var(--wb-heading);
+}
+[data-reader-theme] .eyebrow {
+    color: var(--wb-accent);
+}
+
+/* Body text */
+[data-reader-theme] .text-ink,
+[data-reader-theme] .text-\[\#c8ccd3\],
+[data-reader-theme] .text-\[\#b8bcc4\],
+[data-reader-theme] .text-\[\#e6e2d8\],
+[data-reader-theme] .text-\[\#e0e6e5\] {
+    color: var(--wb-text);
+}
+
+/* Muted + faint text */
+[data-reader-theme] .text-muted,
+[data-reader-theme] .text-\[\#9aa0ab\],
+[data-reader-theme] .text-\[\#8b909b\],
+[data-reader-theme] .text-\[\#8a909b\] {
+    color: var(--wb-muted);
+}
+[data-reader-theme] .text-faint,
+[data-reader-theme] .text-\[\#6b7180\],
+[data-reader-theme] .text-\[\#6f7580\],
+[data-reader-theme] .text-\[\#5b616c\],
+[data-reader-theme] .text-\[\#4a4f59\] {
+    color: var(--wb-faint);
+}
+
+/* Semantic hooks: stable class names a world's future custom CSS can target, all bound to the same
+   variables so they theme automatically. Applied incrementally across reader surfaces. */
+.wb-reader .wb-title {
+    color: var(--wb-heading);
+}
+.wb-reader .wb-body {
+    color: var(--wb-text);
+}
+.wb-reader .wb-muted {
+    color: var(--wb-muted);
+}
+.wb-reader .wb-accent {
+    color: var(--wb-accent);
+}
+.wb-reader .wb-card {
+    background-color: var(--wb-surface);
+    border-color: var(--wb-edge);
+}
+
+@keyframes rise {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+@keyframes fade {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@layer components {
+    /* Small mono uppercase label used above titles. */
+    .eyebrow {
+        @apply font-mono text-[10px] uppercase tracking-[0.2em] text-teal;
+    }
+    .eyebrow-muted {
+        @apply font-mono text-[10px] uppercase tracking-[0.16em] text-faint;
+    }
+
+    /* Dark surface panels + cards. */
+    .panel {
+        @apply rounded-lg border border-edge2 bg-card;
+    }
+    .card-link {
+        @apply rounded-lg border border-edge2 bg-card p-5 transition hover:border-teal;
+    }
+
+    /* Form controls (override @tailwindcss/forms defaults for the dark theme). */
+    .field {
+        @apply w-full rounded-md border border-edge3 bg-raised px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-teal focus:ring-0;
+    }
+
+    /* Buttons. */
+    .btn-primary {
+        @apply inline-flex items-center gap-2 rounded-md bg-amber px-4 py-2 text-sm font-medium text-night transition hover:bg-amber/90 disabled:opacity-50;
+    }
+    .btn-ghost {
+        @apply inline-flex items-center gap-2 rounded-md border border-edge3 px-4 py-2 text-sm text-ink transition hover:border-teal disabled:opacity-50;
+    }
+    .btn-teal {
+        @apply inline-flex items-center gap-2 rounded-md bg-teal px-4 py-2 text-sm font-medium text-night transition hover:bg-teal/90 disabled:opacity-50;
+    }
+
+    /* Visibility pills. */
+    .badge-players {
+        @apply rounded-full bg-teal/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-teal;
+    }
+    .badge-gm {
+        @apply rounded-full border border-amber/40 bg-amber/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-amber;
+    }
+
+    /* Tables. */
+    .wb-table {
+        @apply w-full text-left text-sm;
+    }
+    .wb-table thead {
+        @apply bg-surface text-xs uppercase tracking-wider text-faint;
+    }
+    .wb-table th {
+        @apply px-4 py-2 font-medium;
+    }
+    .wb-table td {
+        @apply px-4 py-2;
+    }
+    .wb-table tbody tr {
+        @apply border-t border-edge;
+    }
+}
+
+/* Print / "Save as PDF": show only the `.printable` region on a clean white page. */
+@media print {
+    @page {
+        margin: 16mm;
+    }
+
+    body {
+        background: #fff !important;
+    }
+
+    body * {
+        visibility: hidden !important;
+    }
+
+    .printable,
+    .printable * {
+        visibility: visible !important;
+    }
+
+    .printable {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+
+    .no-print {
+        display: none !important;
+    }
+}
