@@ -219,6 +219,60 @@ class DeepgramWebhookTest extends TestCase
         Bus::assertDispatched(ReapStuckTranscription::class, fn ($job) => $job->delay !== null);
     }
 
+    public function test_the_reaper_is_scheduled_within_the_sqs_delay_ceiling_for_a_long_callback_timeout(): void
+    {
+        Storage::fake('s3');
+        config(['services.deepgram.callback_url' => 'https://tunnel.test']);
+        // Deliberately longer than SQS's 15-minute per-message delay limit; the reaper must still fit within it.
+        config(['services.deepgram.callback_timeout_minutes' => 30]);
+        Bus::fake([ReapStuckTranscription::class]);
+
+        $fake = new class implements CallbackTranscriber
+        {
+            #[\Override]
+            public function transcribe(string $disk, string $path): string
+            {
+                return DeepgramWebhookTest::TRANSCRIPT;
+            }
+
+            #[\Override]
+            public function submit(string $disk, string $path, string $callbackUrl): string
+            {
+                return 'req_123';
+            }
+
+            #[\Override]
+            public function transcriptFromCallback(array $payload): string
+            {
+                return DeepgramWebhookTest::TRANSCRIPT;
+            }
+
+            #[\Override]
+            public function durationSecondsFromCallback(array $payload): int
+            {
+                return 0;
+            }
+        };
+        $this->app->bind(Transcriber::class, fn () => $fake);
+
+        $gm = User::factory()->create(['ai_credit_balance' => 1000]);
+        $session = $this->sessionFor($gm);
+        $key = "recaps/{$session->id}/abc.wav";
+        Storage::disk('s3')->put($key, 'audio');
+
+        $this->actingAs($gm)->postJson(route('sessions.recap.store', $session), [
+            'key' => $key,
+            'duration_seconds' => 3600,
+            'detail_level' => 'comprehensive',
+        ])->assertStatus(202);
+
+        // SQS rejects DelaySeconds above 900; the reaper must never ask for more, however long the timeout.
+        Bus::assertDispatched(
+            ReapStuckTranscription::class,
+            fn ($job) => is_int($job->delay) && $job->delay > 0 && $job->delay <= 900,
+        );
+    }
+
     public function test_the_reaper_fails_a_recap_still_awaiting_its_callback(): void
     {
         $gm = User::factory()->create();

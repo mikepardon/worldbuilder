@@ -56,7 +56,9 @@ return [
             'url' => env('AWS_URL'),
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
-            'throw' => false,
+            // Throw on write/read failure rather than returning false. A silent false let failed
+            // uploads create Media rows pointing at objects that were never stored (see MediaController).
+            'throw' => true,
             'report' => false,
         ],
 

@@ -56,9 +56,9 @@ class TranscribeRecap implements ShouldQueue
                 $requestId = $transcriber->submit($recap->disk, $recap->path, $callbackUrl);
                 $recap->update(['transcription_request_id' => $requestId]);
 
-                // Fail the recap if the callback never lands, rather than leaving it stuck forever.
-                $timeout = (int) config('services.deepgram.callback_timeout_minutes', 30);
-                dispatch(new ReapStuckTranscription($recap))->delay(now()->addMinutes($timeout));
+                // Fail the recap if the callback never lands, rather than leaving it stuck forever. The reaper
+                // schedules itself within SQS's per-message delay ceiling and re-arms until the deadline passes.
+                ReapStuckTranscription::arm($recap);
 
                 return;
             }

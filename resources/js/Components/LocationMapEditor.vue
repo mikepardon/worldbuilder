@@ -1,7 +1,7 @@
 <script setup>
 import UppyUploader from "@/Components/UppyUploader.vue";
 import { router, useForm } from "@inertiajs/vue3";
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 
 const props = defineProps({
     campaign: Object,
@@ -69,6 +69,17 @@ const imageEndpoint = computed(() =>
     props.map ? route("maps.image", [props.campaign.id, props.map.id]) : "",
 );
 const onImageUploaded = () => router.reload({ preserveScroll: true });
+// A stored image whose file is missing (deleted, or a failed upload) still yields a truthy
+// image_url, which would otherwise lock the editor into "has image" and hide the uploader.
+// Treat a failed <img> load as "no image" so the upload panel returns. Reset whenever the
+// underlying image changes so a freshly uploaded, working image isn't kept in the error state.
+const imageError = ref(false);
+watch(
+    () => props.map?.image_url,
+    () => {
+        imageError.value = false;
+    },
+);
 
 /* ---- pan & zoom ---- */
 const viewport = ref(null);
@@ -243,7 +254,7 @@ const deletePin = () => {
     else selected.value = null;
 };
 
-const hasImage = computed(() => !!props.map?.image_url);
+const hasImage = computed(() => !!props.map?.image_url && !imageError.value);
 
 /* ---- real-world scale (width + distance unit) ---- */
 const scale = reactive({
@@ -325,6 +336,7 @@ const saveScale = () => {
                     class="block max-w-none select-none"
                     draggable="false"
                     @load="fitToViewport"
+                    @error="imageError = true"
                 />
                 <button
                     v-for="p in map.pins"
