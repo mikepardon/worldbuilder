@@ -4,7 +4,7 @@ import EntrySettings from "@/Components/EntrySettings.vue";
 import RenderedContent from "@/Components/RenderedContent.vue";
 import { useTextareaAutocomplete } from "@/composables/useTextareaAutocomplete";
 import { Link, router } from "@inertiajs/vue3";
-import { nextTick, reactive, ref, watch } from "vue";
+import { computed, nextTick, reactive, ref, watch } from "vue";
 
 const props = defineProps({
     campaign: Object,
