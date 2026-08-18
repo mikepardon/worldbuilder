@@ -48,6 +48,7 @@ use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SessionController;
 use App\Http\Controllers\SessionNoteController;
 use App\Http\Controllers\SessionUploadController;
+use App\Http\Controllers\StorageController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\UserNoteController;
 use App\Http\Controllers\WebhookController;
@@ -414,6 +415,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/billing/cancel-downgrade', [BillingController::class, 'cancelDowngrade'])->name('billing.cancel-downgrade');
     Route::post('/billing/top-up', [BillingController::class, 'topUp'])->name('billing.topup');
     Route::post('/billing/portal', [BillingController::class, 'portal'])->name('billing.portal');
+
+    // A player's own storage breakdown: review what's stored and reclaim space.
+    Route::get('/storage', [StorageController::class, 'index'])->name('storage.index');
+    // Deletes only the recording's source audio; the transcribed recap is kept.
+    Route::delete('/storage/recordings/{recap}', [StorageController::class, 'destroyRecording'])->name('storage.recordings.destroy');
 });
 
 // Platform admin

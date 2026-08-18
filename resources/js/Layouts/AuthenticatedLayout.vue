@@ -82,6 +82,9 @@ const page = usePage();
                                 <DropdownLink :href="route('billing.index')"
                                     >Billing</DropdownLink
                                 >
+                                <DropdownLink :href="route('storage.index')"
+                                    >Storage</DropdownLink
+                                >
                                 <DropdownLink
                                     v-if="page.props.auth.user.is_admin"
                                     :href="route('admin.dashboard')"
@@ -175,6 +178,9 @@ const page = usePage();
                         >
                         <ResponsiveNavLink :href="route('billing.index')"
                             >Billing</ResponsiveNavLink
+                        >
+                        <ResponsiveNavLink :href="route('storage.index')"
+                            >Storage</ResponsiveNavLink
                         >
                         <ResponsiveNavLink
                             v-if="page.props.auth.user.is_admin"

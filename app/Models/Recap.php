@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * The post-play analysis of a {@see Session}, built from an uploaded audio recording: the raw transcript
@@ -67,6 +68,25 @@ class Recap extends Model
     public function markFailed(string $message): void
     {
         $this->update(['status' => 'failed', 'error' => $message]);
+    }
+
+    /** Whether the source audio is still stored (its path is cleared once the owner deletes it to reclaim space). */
+    public function hasAudio(): bool
+    {
+        return filled($this->path);
+    }
+
+    /**
+     * Delete the stored source audio, reclaiming its storage, while keeping the transcript and analysis.
+     * The recording can no longer be re-transcribed once this runs; re-analysis (from the transcript) still works.
+     */
+    public function purgeAudio(): void
+    {
+        if (filled($this->disk) && filled($this->path)) {
+            Storage::disk($this->disk)->delete($this->path);
+        }
+
+        $this->update(['disk' => '', 'path' => '', 'size_bytes' => 0]);
     }
 
     /** @return HasMany<RecapEntity, $this> */

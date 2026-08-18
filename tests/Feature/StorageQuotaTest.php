@@ -95,11 +95,11 @@ class StorageQuotaTest extends TestCase
         $this->assertSame(1, Media::count());
     }
 
-    public function test_free_plan_storage_limit_is_half_a_gigabyte(): void
+    public function test_free_plan_storage_limit_is_two_gigabytes(): void
     {
         $user = User::factory()->create(['plan' => 'free']);
 
-        $this->assertSame(536870912, $user->storageLimitBytes());
+        $this->assertSame(2147483648, $user->storageLimitBytes());
     }
 
     public function test_uploading_is_blocked_once_the_storage_limit_is_reached(): void
