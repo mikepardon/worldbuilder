@@ -118,6 +118,11 @@ class RecapController extends Controller
         $recap = $session->recap;
         abort_if($recap === null, 404);
 
+        // The source audio may have been deleted to reclaim storage; without it there's nothing to re-transcribe.
+        if (! $recap->hasAudio()) {
+            return response()->json(['message' => 'The source audio was deleted to save storage, so this recording can’t be re-transcribed. Your saved recap is unaffected.'], 422);
+        }
+
         $user = $request->user();
         $cost = CreditWeights::recapCreditCost((int) $recap->duration_seconds);
         if (! $user->canSpendAiCredits($cost)) {
