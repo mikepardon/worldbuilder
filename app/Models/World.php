@@ -22,6 +22,7 @@ class World extends Model
     protected $fillable = [
         'user_id', 'slug', 'name', 'description', 'setting', 'settings', 'visibility', 'is_sandbox', 'cover_media_id',
         'ai_generation_limit', 'ai_generations_used', 'ai_model', 'ddb_enabled', 'ddb_cobalt', 'ddb_campaign_id',
+        'knowledge_ingestion_enabled',
         'custom_domain', 'custom_domain_verified_at', 'discord_webhook',
         'logo_media_id', 'banner_media_id', 'favicon_media_id', 'og_media_id',
         'reader_password', 'field_order',
@@ -34,6 +35,7 @@ class World extends Model
         'ai_generations_used' => 'integer',
         'is_sandbox' => 'boolean',
         'ddb_enabled' => 'boolean',
+        'knowledge_ingestion_enabled' => 'boolean',
         // The Cobalt token is sensitive; Laravel encrypts it at rest and decrypts on access.
         'ddb_cobalt' => 'encrypted',
         'custom_domain_verified_at' => 'datetime',
@@ -488,6 +490,12 @@ class World extends Model
     public function worldBuilds(): HasMany
     {
         return $this->hasMany(WorldBuild::class);
+    }
+
+    /** @return HasMany<WorldIngestion, $this> */
+    public function worldIngestions(): HasMany
+    {
+        return $this->hasMany(WorldIngestion::class);
     }
 
     public function maps(): HasMany

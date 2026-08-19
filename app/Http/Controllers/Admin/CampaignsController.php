@@ -30,6 +30,7 @@ class CampaignsController extends Controller
                     'ai_generations_used' => $world->ai_generations_used,
                     'ai_model' => $world->ai_model,
                     'ddb_enabled' => $world->ddb_enabled,
+                    'knowledge_ingestion_enabled' => $world->knowledge_ingestion_enabled,
                 ]),
         ]);
     }
@@ -66,5 +67,15 @@ class CampaignsController extends Controller
         $world->update(['ddb_enabled' => $data['ddb_enabled']]);
 
         return back()->with('success', 'D&D Beyond import '.($data['ddb_enabled'] ? 'enabled' : 'disabled')." for \"{$world->name}\".");
+    }
+
+    /** Grant or revoke a world's access to the "Add knowledge" ingestion tool. */
+    public function knowledgeAccess(Request $request, World $world)
+    {
+        $data = $request->validate(['knowledge_ingestion_enabled' => ['required', 'boolean']]);
+
+        $world->update(['knowledge_ingestion_enabled' => $data['knowledge_ingestion_enabled']]);
+
+        return back()->with('success', 'Knowledge ingestion '.($data['knowledge_ingestion_enabled'] ? 'enabled' : 'disabled')." for \"{$world->name}\".");
     }
 }

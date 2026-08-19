@@ -68,6 +68,16 @@ const toolLinks = computed(() => [
         href: route("generators.index", props.world.id),
         active: route().current("generators.*"),
     },
+    // Admin-granted per-world feature; only surfaced when enabled.
+    ...(props.world.knowledge_ingestion_enabled
+        ? [
+              {
+                  label: "Add knowledge",
+                  href: route("worlds.ingest", props.world.id),
+                  active: route().current("worlds.ingest"),
+              },
+          ]
+        : []),
     {
         label: "Connections web",
         href: route("worlds.web", props.world.id),

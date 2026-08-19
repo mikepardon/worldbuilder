@@ -56,6 +56,7 @@ use App\Http\Controllers\WorldAttributeController;
 use App\Http\Controllers\WorldBuildController;
 use App\Http\Controllers\WorldController;
 use App\Http\Controllers\WorldDomainController;
+use App\Http\Controllers\WorldIngestionController;
 use App\Http\Controllers\WorldMemberController;
 use App\Http\Controllers\WorldSessionController;
 use App\Http\Controllers\WorldBlockController;
@@ -139,6 +140,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Build a world's wiki entries from its seed notes in the background, and poll that build's progress.
     Route::post('/worlds/{world}/build', [WorldBuildController::class, 'store'])->name('worlds.build.store');
     Route::get('/worlds/{world}/build/status', [WorldBuildController::class, 'status'])->name('worlds.build.status');
+    // Add knowledge to an existing world: propose a plan from freeform notes, review, then apply on the queue.
+    Route::get('/worlds/{world}/ingest', [WorldIngestionController::class, 'index'])->name('worlds.ingest');
+    Route::post('/worlds/{world}/ingest', [WorldIngestionController::class, 'store'])->name('worlds.ingest.store');
+    // {ingestion} is a top-level binding; the controller's ensureBelongs() scopes it to the world.
+    Route::get('/worlds/{world}/ingest/{ingestion}/status', [WorldIngestionController::class, 'status'])->name('worlds.ingest.status');
+    Route::post('/worlds/{world}/ingest/{ingestion}/apply', [WorldIngestionController::class, 'apply'])->name('worlds.ingest.apply');
+    Route::post('/worlds/{world}/ingest/{ingestion}/resume', [WorldIngestionController::class, 'resume'])->name('worlds.ingest.resume');
+    Route::delete('/worlds/{world}/ingest/{ingestion}', [WorldIngestionController::class, 'destroy'])->name('worlds.ingest.destroy');
     Route::put('/worlds/{world}/cover', [WorldController::class, 'cover'])->name('worlds.cover');
     Route::post('/worlds/{world}/branding', [WorldController::class, 'branding'])->name('worlds.branding');
     Route::delete('/worlds/{world}/branding', [WorldController::class, 'clearBranding'])->name('worlds.branding.clear');
@@ -436,6 +445,7 @@ Route::middleware(['auth', 'can:access-admin'])->prefix('admin')->name('admin.')
     Route::put('/worlds/{world}/ai-budget', [AdminCampaigns::class, 'aiBudget'])->name('worlds.ai-budget');
     Route::put('/worlds/{world}/ai-model', [AdminCampaigns::class, 'aiModel'])->name('worlds.ai-model');
     Route::put('/worlds/{world}/ddb-access', [AdminCampaigns::class, 'ddbAccess'])->name('worlds.ddb-access');
+    Route::put('/worlds/{world}/knowledge-access', [AdminCampaigns::class, 'knowledgeAccess'])->name('worlds.knowledge-access');
 
     Route::get('/compendium', [AdminCompendium::class, 'index'])->name('compendium.index');
     Route::post('/compendium/sources/{source}/import', [AdminCompendium::class, 'import'])->name('compendium.import');

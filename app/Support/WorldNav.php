@@ -25,6 +25,8 @@ class WorldNav
             'entries' => $documents->count(),
             'sections' => Sections::withCounts($documents),
             // Owner-only tools (co-authors, world settings) are hidden from invited editors.
+            // Admin-granted feature access (off by default), gating the matching Tools links.
+            'knowledge_ingestion_enabled' => (bool) $world->knowledge_ingestion_enabled,
             'is_owner' => auth()->id() === $world->user_id,
             // Who may reach world settings/fields/templates: the owner, or an admin (who bypasses the
             // policy) — so the settings nav shows for them even though they aren't the strict owner.

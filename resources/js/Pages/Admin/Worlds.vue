@@ -38,6 +38,11 @@ const toggleDdb = (c) => {
     router.put(route('admin.worlds.ddb-access', c.id), { ddb_enabled: !c.ddb_enabled }, { preserveScroll: true });
 };
 
+/* ---- Knowledge ingestion access (per world) ---- */
+const toggleKnowledge = (c) => {
+    router.put(route('admin.worlds.knowledge-access', c.id), { knowledge_ingestion_enabled: !c.knowledge_ingestion_enabled }, { preserveScroll: true });
+};
+
 const q = ref('');
 const filter = ref('all');
 const shown = computed(() =>
@@ -72,7 +77,7 @@ const shown = computed(() =>
 
         <div class="panel overflow-hidden">
             <table class="wb-table">
-                <thead><tr><th>World</th><th>Owner</th><th>Visibility</th><th>Entries</th><th>AI budget</th><th>AI model</th><th>DDB import</th><th>Public link</th></tr></thead>
+                <thead><tr><th>World</th><th>Owner</th><th>Visibility</th><th>Entries</th><th>AI budget</th><th>AI model</th><th>DDB import</th><th>Knowledge</th><th>Public link</th></tr></thead>
                 <tbody>
                     <tr v-for="c in shown" :key="c.id">
                         <td class="text-ink">{{ c.name }}</td>
@@ -109,11 +114,20 @@ const shown = computed(() =>
                             </button>
                         </td>
                         <td>
+                            <button
+                                class="rounded-full px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] transition"
+                                :class="c.knowledge_ingestion_enabled ? 'border border-[#3f5c2e] bg-[#1c2416] text-[#9dc47a]' : 'border border-edge3 text-faint hover:text-ink'"
+                                @click="toggleKnowledge(c)"
+                            >
+                                {{ c.knowledge_ingestion_enabled ? 'Enabled' : 'Off' }}
+                            </button>
+                        </td>
+                        <td>
                             <a v-if="c.public_url" :href="c.public_url" target="_blank" class="font-mono text-xs text-teal hover:underline">/w/{{ c.slug }}</a>
                             <span v-else class="text-faint">—</span>
                         </td>
                     </tr>
-                    <tr v-if="!shown.length"><td colspan="8" class="py-10 text-center text-faint">No matching worlds.</td></tr>
+                    <tr v-if="!shown.length"><td colspan="9" class="py-10 text-center text-faint">No matching worlds.</td></tr>
                 </tbody>
             </table>
         </div>
