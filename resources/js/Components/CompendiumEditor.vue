@@ -50,8 +50,34 @@ const gridCols = computed(() =>
     showClaude.value ? "360px minmax(0,1fr) 380px" : "360px minmax(0,1fr)",
 );
 
-// The entry's data exactly as it's stored, for the "code" view: a monster's stat block or a structured
-// type's fields as JSON, or a freeform entry's Markdown source.
+const form = reactive({
+    name: props.item.name,
+    summary: props.item.summary ?? "",
+    is_private: props.item.is_private,
+    is_active: props.item.is_active,
+    visible: props.item.visible ?? true,
+    document: props.item.document ?? "",
+    block: props.item.block ?? null,
+    fields: { ...(props.item.fields ?? {}) },
+    tags: [...(props.item.tags ?? [])],
+});
+
+// Non-monster types edit structured fields: ensure each schema key exists, and seed the description
+// from any legacy freeform document so switching to the field editor loses nothing.
+if (!isMonster.value && props.fieldSchema.length) {
+    props.fieldSchema.forEach((field) => {
+        if (form.fields[field.key] === undefined) form.fields[field.key] = "";
+    });
+    if (!locked.value && !form.fields.description && props.item.document) {
+        form.fields.description = props.item.document
+            .replace(/^#.*\n+/, "")
+            .trim();
+    }
+}
+
+/* ---- Code view: an editable, live-synced buffer over the stored data ---- */
+// The entry's data exactly as it's stored: a monster's stat block or a structured type's fields as JSON,
+// or a freeform entry's Markdown source. (Declared after `form`, which its getter reads.)
 const storedCode = computed(() => {
     if (isMonster.value) return JSON.stringify(form.block ?? {}, null, 2);
     if (props.fieldSchema.length) return JSON.stringify(form.fields ?? {}, null, 2);
@@ -125,31 +151,6 @@ watch(storedCode, (next) => {
         codeError.value = "";
     }
 });
-
-const form = reactive({
-    name: props.item.name,
-    summary: props.item.summary ?? "",
-    is_private: props.item.is_private,
-    is_active: props.item.is_active,
-    visible: props.item.visible ?? true,
-    document: props.item.document ?? "",
-    block: props.item.block ?? null,
-    fields: { ...(props.item.fields ?? {}) },
-    tags: [...(props.item.tags ?? [])],
-});
-
-// Non-monster types edit structured fields: ensure each schema key exists, and seed the description
-// from any legacy freeform document so switching to the field editor loses nothing.
-if (!isMonster.value && props.fieldSchema.length) {
-    props.fieldSchema.forEach((field) => {
-        if (form.fields[field.key] === undefined) form.fields[field.key] = "";
-    });
-    if (!locked.value && !form.fields.description && props.item.document) {
-        form.fields.description = props.item.document
-            .replace(/^#.*\n+/, "")
-            .trim();
-    }
-}
 
 const saved = ref(true);
 let timer = null;
