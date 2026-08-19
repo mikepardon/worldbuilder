@@ -108,14 +108,17 @@ watch(
 const textarea = ref(null);
 const gutter = ref(null);
 const highlightLayer = ref(null);
-const lines = computed(() => form.content.split("\n"));
-const stats = computed(() => ({
-    lines: lines.value.length,
-    words: form.content.trim() ? form.content.trim().split(/\s+/).length : 0,
-}));
+const lines = computed(() => (form.content ?? "").split("\n"));
+const stats = computed(() => {
+    const trimmed = (form.content ?? "").trim();
+    return {
+        lines: lines.value.length,
+        words: trimmed ? trimmed.split(/\s+/).length : 0,
+    };
+});
 // Coloured highlight layer rendered behind the (transparent) textarea. Trailing newline keeps the
 // final line's height in step with the textarea.
-const highlighted = computed(() => `${highlightBrewSource(form.content)}\n`);
+const highlighted = computed(() => `${highlightBrewSource(form.content ?? "")}\n`);
 
 // Keep the line-number gutter and highlight layer aligned with the textarea as it scrolls.
 const syncGutter = () => {
@@ -312,7 +315,7 @@ const {
     content: {
         get: () => form.content,
         set: (value) => {
-            form.content = value;
+            form.content = value ?? "";
         },
     },
     triggers: [
@@ -404,7 +407,7 @@ const send = async (promptText) => {
     }
 };
 const applyReply = (content) => {
-    form.content = content;
+    form.content = content ?? "";
 };
 const clearChat = () => {
     messages.value = [];
