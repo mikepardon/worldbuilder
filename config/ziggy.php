@@ -44,6 +44,9 @@ return [
         // Billing
         'billing.*',
 
+        // Storage breakdown
+        'storage.*',
+
         // Worlds & their content
         'worlds.*',
         'documents.*',
