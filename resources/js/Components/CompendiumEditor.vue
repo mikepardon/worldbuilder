@@ -65,6 +65,67 @@ const codeCaption = computed(() =>
           : "How it renders on a page.",
 );
 
+// The code view is an editable buffer. Parsing writes back into the same form fields the structured editor
+// uses, so it autosaves through the normal watcher; invalid JSON is flagged and left unsaved.
+const codeDraft = ref("");
+const codeError = ref("");
+
+const toggleCode = () => {
+    if (!preview.code) {
+        codeDraft.value = storedCode.value;
+        codeError.value = "";
+    }
+    preview.code = !preview.code;
+};
+
+const applyCode = () => {
+    // Monsters and structured types store JSON; freeform entries store Markdown.
+    if (isMonster.value || props.fieldSchema.length) {
+        let parsed;
+        try {
+            parsed = JSON.parse(codeDraft.value);
+        } catch (error) {
+            codeError.value = `Invalid JSON — ${error.message}`;
+            return;
+        }
+        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+            codeError.value = "Expected a JSON object.";
+            return;
+        }
+        codeError.value = "";
+        if (isMonster.value) form.block = parsed;
+        else form.fields = parsed;
+        return;
+    }
+    codeError.value = "";
+    form.document = codeDraft.value;
+};
+
+// Whether the code buffer already represents the same data as `value` (ignoring JSON formatting), so an
+// edit that came from the code view itself doesn't reformat/jump the cursor.
+const draftMatches = (value) => {
+    if (isMonster.value || props.fieldSchema.length) {
+        try {
+            return (
+                JSON.stringify(JSON.parse(codeDraft.value)) ===
+                JSON.stringify(JSON.parse(value))
+            );
+        } catch {
+            return false;
+        }
+    }
+    return codeDraft.value === value;
+};
+
+// Live-sync form → code: when the structured editor or a Muse patch changes the data, refresh the code
+// buffer — but only for genuine external changes, never for the code view's own (already-synced) edits.
+watch(storedCode, (next) => {
+    if (!preview.code || !draftMatches(next)) {
+        codeDraft.value = next;
+        codeError.value = "";
+    }
+});
+
 const form = reactive({
     name: props.item.name,
     summary: props.item.summary ?? "",
@@ -984,8 +1045,8 @@ const removeImage = () => {
                     <button
                         class="rounded-full border border-edge3 px-3 py-1 font-mono text-[10.5px] tracking-[0.1em]"
                         :class="preview.code ? 'bg-amber text-night' : 'text-muted'"
-                        title="View the entry's data exactly as it's stored"
-                        @click="preview.code = !preview.code"
+                        :title="locked ? 'View the entry\'s stored data' : 'View and edit the entry\'s stored data'"
+                        @click="toggleCode()"
                     >
                         CODE
                     </button>
@@ -996,10 +1057,30 @@ const removeImage = () => {
                 <div
                     class="flex min-h-0 flex-1 justify-center overflow-auto p-6"
                 >
-                    <pre
+                    <div
                         v-if="preview.code"
-                        class="w-full max-w-[820px] select-text overflow-auto rounded-md border border-edge2 bg-[#0b0d10] p-4 font-mono text-[12px] leading-relaxed text-ink"
-                    >{{ storedCode || "— nothing stored yet —" }}</pre>
+                        class="flex w-full max-w-[820px] flex-col gap-2"
+                    >
+                        <textarea
+                            v-if="!locked"
+                            v-model="codeDraft"
+                            spellcheck="false"
+                            class="min-h-[60vh] w-full flex-1 resize-none rounded-md bg-[#0b0d10] p-4 font-mono text-[12px] leading-relaxed text-ink focus:ring-0"
+                            :class="codeError ? 'border-2 border-red-500/60' : 'border border-edge2'"
+                            @input="applyCode"
+                        ></textarea>
+                        <pre
+                            v-else
+                            class="min-h-[60vh] w-full select-text overflow-auto rounded-md border border-edge2 bg-[#0b0d10] p-4 font-mono text-[12px] leading-relaxed text-ink"
+                        >{{ storedCode || "— nothing stored yet —" }}</pre>
+                        <p v-if="codeError" class="font-mono text-[11px] text-red-400">
+                            {{ codeError }} — fix the JSON to save.
+                        </p>
+                        <p v-else class="font-mono text-[11px] text-faint">
+                            {{ locked ? "Imported entries are read-only." : "Edits save automatically." }}
+                            <template v-if="!locked && isMonster"> Editing the stat block regenerates the entry.</template>
+                        </p>
+                    </div>
                     <div
                         v-else
                         class="w-full"
