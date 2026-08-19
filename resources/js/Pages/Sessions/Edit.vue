@@ -18,7 +18,7 @@ const props = defineProps({
 <template>
     <Head :title="document.title" />
 
-    <AuthenticatedLayout>
+    <AuthenticatedLayout flush>
         <BrewEditor
             :campaign="campaign"
             :document="document"

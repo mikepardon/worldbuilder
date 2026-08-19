@@ -8,8 +8,11 @@ import { Link, usePage } from "@inertiajs/vue3";
 import { ref } from "vue";
 
 // World pages nest their own top nav (WorldLayout) and pass `bare` to hide the redundant outer bar.
-const { bare = false } = defineProps({
+// `flush` makes the shell a fixed-height, non-scrolling column so a full-height page (e.g. the entry
+// editor) fills the viewport and manages its own internal scrolling instead of scrolling the whole page.
+const { bare = false, flush = false } = defineProps({
     bare: { type: Boolean, default: false },
+    flush: { type: Boolean, default: false },
 });
 
 const showingNavigationDropdown = ref(false);
@@ -17,8 +20,11 @@ const page = usePage();
 </script>
 
 <template>
-    <div class="min-h-screen bg-night text-ink">
-        <nav v-if="!bare" class="border-b border-edge bg-surface">
+    <div
+        class="bg-night text-ink"
+        :class="flush ? 'flex h-screen flex-col overflow-hidden' : 'min-h-screen'"
+    >
+        <nav v-if="!bare" class="shrink-0 border-b border-edge bg-surface">
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div class="flex h-16 justify-between">
                     <div class="flex">
@@ -223,7 +229,7 @@ const page = usePage();
             </div>
         </div>
 
-        <main>
+        <main :class="flush ? 'min-h-0 flex-1 overflow-hidden' : ''">
             <slot />
         </main>
     </div>
