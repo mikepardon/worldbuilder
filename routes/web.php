@@ -265,6 +265,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/compendium/{item}/clone', [CompendiumController::class, 'clone'])->name('compendium.clone');
     Route::post('/compendium/{item}/draft', [CompendiumController::class, 'draft'])->name('compendium.draft');
     Route::post('/compendium/{item}/rebuild', [CompendiumController::class, 'rebuild'])->name('compendium.rebuild');
+    Route::post('/compendium/{item}/image', [CompendiumController::class, 'uploadImage'])->name('compendium.image');
+    Route::delete('/compendium/{item}/image', [CompendiumController::class, 'removeImage'])->name('compendium.image.destroy');
     Route::delete('/compendium/{item}', [CompendiumController::class, 'destroy'])->name('compendium.destroy');
 
     // D&D Beyond (world)

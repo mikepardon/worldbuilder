@@ -96,10 +96,11 @@ class CompendiumDraftTest extends TestCase
             ->assertJsonPath('block', null);
     }
 
-    public function test_a_successful_draft_is_billed_against_the_world_budget(): void
+    public function test_a_successful_draft_is_billed_against_the_users_credits(): void
     {
-        $gm = User::factory()->create();
-        $campaign = $this->world($gm, budget: 3);
+        // 5 free daily credits + 10 balance = 15; a spell draft costs 1.
+        $gm = User::factory()->create(['ai_credit_balance' => 10]);
+        $campaign = $this->world($gm);
         $spell = $campaign->compendiumItems()->create([
             'item_type' => 'spell', 'slug' => 'fb', 'name' => 'Fireball', 'provider' => 'custom',
         ]);
@@ -108,15 +109,20 @@ class CompendiumDraftTest extends TestCase
 
         $this->actingAs($gm)->postJson(route('compendium.draft', $spell), ['prompt' => 'draft it'])
             ->assertOk()
-            ->assertJsonPath('ai.remaining', 2);
+            ->assertJsonPath('ai.creditsRemaining', 14);
 
-        $this->assertSame(1, $campaign->fresh()->ai_generations_used);
+        $this->assertSame(14, $gm->fresh()->aiCreditsRemaining());
     }
 
-    public function test_draft_is_blocked_when_the_world_has_no_ai_budget(): void
+    public function test_draft_is_blocked_when_the_user_is_out_of_credits(): void
     {
-        $gm = User::factory()->create();
-        $campaign = $this->world($gm, budget: 0);
+        // Daily allowance spent and no top-up balance → 0 credits available.
+        $gm = User::factory()->create([
+            'ai_credit_balance' => 0,
+            'daily_ai_used' => 5,
+            'daily_ai_reset_on' => now()->toDateString(),
+        ]);
+        $campaign = $this->world($gm);
         $spell = $campaign->compendiumItems()->create([
             'item_type' => 'spell', 'slug' => 'fb', 'name' => 'Fireball', 'provider' => 'custom',
         ]);
@@ -127,7 +133,7 @@ class CompendiumDraftTest extends TestCase
         $this->app->instance(AnthropicClient::class, $ai);
 
         $this->actingAs($gm)->postJson(route('compendium.draft', $spell), ['prompt' => 'draft it'])
-            ->assertStatus(422);
+            ->assertStatus(402);
     }
 
     public function test_draft_is_rejected_for_an_imported_read_only_entry(): void

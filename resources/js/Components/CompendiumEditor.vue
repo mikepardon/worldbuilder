@@ -2,6 +2,7 @@
 import PickerModal from "@/Components/PickerModal.vue";
 import SpellPicker from "@/Components/SpellPicker.vue";
 import StatblockCard from "@/Components/StatblockCard.vue";
+import UppyUploader from "@/Components/UppyUploader.vue";
 import { renderMarkdown } from "@/lib/compendiumFields";
 import {
     ABILITY_LABELS,
@@ -27,7 +28,7 @@ const props = defineProps({
     fieldSchema: { type: Array, default: () => [] },
     ai: {
         type: Object,
-        default: () => ({ configured: false, remaining: 0, limit: 0 }),
+        default: () => ({ configured: false, credits: 0, cost: 1 }),
     },
     // Admin edits the shared library (visibility flag); GMs edit a world copy (players/active/tags).
     admin: { type: Boolean, default: false },
@@ -220,7 +221,7 @@ const html = computed(() => {
 });
 
 /* ---- Claude assistant ---- */
-const remaining = ref(props.ai.remaining);
+const credits = ref(props.ai.credits ?? 0);
 const messages = ref([]);
 const chatInput = ref("");
 const asking = ref(false);
@@ -231,7 +232,7 @@ const canAsk = computed(
     () =>
         props.ai.configured &&
         !locked.value &&
-        (props.admin || remaining.value > 0),
+        (props.admin || credits.value >= (props.ai.cost ?? 1)),
 );
 const suggestions = computed(() =>
     isMonster.value
@@ -303,7 +304,8 @@ const send = async (text) => {
             applied: !!undo,
             undo,
         });
-        if (res.data.ai) remaining.value = res.data.ai.remaining;
+        if (res.data.ai?.creditsRemaining !== undefined)
+            credits.value = res.data.ai.creditsRemaining;
     } catch (e) {
         chatError.value = e.response?.data?.message ?? "The AI request failed.";
     } finally {
@@ -312,6 +314,23 @@ const send = async (text) => {
     }
 };
 const boxText = (t) => marked.parse(t ?? "", { breaks: true });
+
+/* ---- entry image ---- */
+const imageUrl = ref(props.item.image_url ?? null);
+const imageUppy = ref(null);
+const removingImage = ref(false);
+const openImage = () => imageUppy.value?.open();
+const onImageUploaded = (body) => {
+    if (body?.image_url) imageUrl.value = body.image_url;
+};
+const removeImage = () => {
+    if (!window.confirm("Remove this image? This frees its storage.")) return;
+    removingImage.value = true;
+    window.axios
+        .delete(route("compendium.image.destroy", props.item.id))
+        .then(() => (imageUrl.value = null))
+        .finally(() => (removingImage.value = false));
+};
 </script>
 
 <template>
@@ -388,6 +407,51 @@ const boxText = (t) => marked.parse(t ?? "", { breaks: true });
             <div
                 class="flex min-h-0 flex-col gap-4 overflow-auto border-r border-edge2 bg-surface px-4 pb-8 pt-4"
             >
+                <!-- Image -->
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-[13px] font-semibold text-ink">Image</label>
+                    <div class="flex items-center gap-3">
+                        <span
+                            class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-raised bg-cover bg-center text-faint ring-1 ring-edge2"
+                            :style="{
+                                backgroundImage: imageUrl
+                                    ? `url(${imageUrl})`
+                                    : 'none',
+                            }"
+                        >
+                            <span v-if="!imageUrl" class="text-[10px]">None</span>
+                        </span>
+                        <div v-if="!locked" class="flex flex-col gap-1.5">
+                            <button
+                                type="button"
+                                class="rounded-md border border-edge3 px-3 py-1.5 text-sm text-ink transition hover:border-amber hover:text-amber"
+                                @click="openImage"
+                            >
+                                {{ imageUrl ? "Replace image" : "Upload image" }}
+                            </button>
+                            <button
+                                v-if="imageUrl"
+                                type="button"
+                                class="text-left text-xs text-faint transition hover:text-amber disabled:opacity-50"
+                                :disabled="removingImage"
+                                @click="removeImage"
+                            >
+                                {{ removingImage ? "Removing…" : "Remove" }}
+                            </button>
+                        </div>
+                    </div>
+                    <UppyUploader
+                        v-if="!locked"
+                        ref="imageUppy"
+                        modal
+                        :endpoint="route('compendium.image', item.id)"
+                        :allowed-file-types="['image/*']"
+                        :max-file-size-mb="50"
+                        :max-number-of-files="1"
+                        @uploaded="onImageUploaded"
+                    />
+                </div>
+
                 <div class="flex flex-col gap-1.5">
                     <label class="text-[13px] font-semibold text-ink"
                         >Summary</label
@@ -958,8 +1022,7 @@ const boxText = (t) => marked.parse(t ?? "", { breaks: true });
                         >
                         <template v-else-if="admin">ready</template>
                         <template v-else
-                            >{{ remaining }} / {{ ai.limit }} generations
-                            left</template
+                            >{{ credits }} credits · {{ ai.cost }}/reply</template
                         >
                     </span>
                 </div>
@@ -970,9 +1033,7 @@ const boxText = (t) => marked.parse(t ?? "", { breaks: true });
                             see the current
                             {{ isMonster ? "stat block" : "draft" }} and writes
                             straight into it.{{
-                                admin
-                                    ? ""
-                                    : " Replies count against your world's budget."
+                                admin ? "" : " Replies use your AI credits."
                             }}
                         </p>
                         <div
@@ -1040,7 +1101,11 @@ const boxText = (t) => marked.parse(t ?? "", { breaks: true });
                         :placeholder="
                             canAsk
                                 ? `Ask ${aiName} to change or draft this entry…`
-                                : 'AI unavailable.'
+                                : !ai.configured
+                                  ? 'AI isn’t set up on this server yet.'
+                                  : locked
+                                    ? 'Imported entries are read-only.'
+                                    : 'Out of AI credits — they reset daily.'
                         "
                         @keydown.enter.exact.prevent="send()"
                     />

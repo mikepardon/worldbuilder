@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CampaignCompendiumItem;
 use App\Models\CompendiumItem;
+use App\Models\Media;
 use App\Models\World;
 use App\Services\AnthropicClient;
 use App\Services\CompendiumDrafter;
@@ -13,12 +14,15 @@ use App\Services\CritterDbClient;
 use App\Services\Open5eClient;
 use App\Support\AiUsageContext;
 use App\Support\Compendium;
+use App\Support\CreditWeights;
 use App\Support\CompendiumFields;
 use App\Support\CritterDb;
 use App\Support\Statblock;
 use App\Support\WorldNav;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -281,7 +285,7 @@ class CompendiumController extends Controller
         }
     }
 
-    public function edit(CampaignCompendiumItem $item)
+    public function edit(Request $request, CampaignCompendiumItem $item)
     {
         $this->authorize('view', $item);
 
@@ -328,8 +332,8 @@ class CompendiumController extends Controller
                 ->all(),
             'ai' => [
                 'configured' => app(AnthropicClient::class)->configured(),
-                'remaining' => $world->aiGenerationsRemaining(),
-                'limit' => $world->ai_generation_limit,
+                'credits' => $request->user()->aiCreditsRemaining(),
+                'cost' => CreditWeights::forFeature('compendium_draft', $item->item_type),
             ],
         ]);
     }
@@ -408,12 +412,13 @@ class CompendiumController extends Controller
         }
 
         $world = $item->world;
-        if (! $world->canUseAi()) {
+        $user = $request->user();
+        $cost = CreditWeights::forFeature('compendium_draft', $item->item_type);
+        if (! $user->canSpendAiCredits($cost)) {
             return response()->json([
-                'message' => $world->ai_generation_limit > 0
-                    ? 'This world has used all of its AI generations. Ask an admin to top it up.'
-                    : "AI generation isn't enabled for this world yet. Ask an admin to grant a budget.",
-            ], 422);
+                'message' => 'You’re out of AI credits — they reset daily. Top up or upgrade for more.',
+                'outOfCredits' => true,
+            ], 402);
         }
 
         $currentBlock = (array) (data_get($item->fields, 'block') ?? Statblock::empty());
@@ -433,16 +438,66 @@ class CompendiumController extends Controller
             return response()->json(['message' => 'The AI returned an unexpected response. Please try again.'], 422);
         }
 
-        // Only a successful generation is billed against the world's budget.
-        $world->increment('ai_generations_used');
+        // Only a successful generation is billed — against the user's credit balance.
+        $user->spendAiCredits($cost);
 
         return response()->json([
             ...$result,
-            'ai' => [
-                'remaining' => $world->fresh()->aiGenerationsRemaining(),
-                'limit' => $world->ai_generation_limit,
-            ],
+            'ai' => ['creditsRemaining' => $user->aiCreditsRemaining()],
         ]);
+    }
+
+    /** Attach (or replace) the entry's image. Uppy posts the file here and expects JSON. */
+    public function uploadImage(Request $request, CampaignCompendiumItem $item): JsonResponse
+    {
+        $this->authorize('update', $item);
+        abort_if($item->isLocked(), 403, 'Imported entries are read-only. Clone it to make an editable copy.');
+
+        $validator = Validator::make($request->all(), [
+            'file' => ['required', 'file', 'mimes:'.implode(',', config('media.accept')), 'max:51200'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first('file') ?: 'That image could not be uploaded.'], 422);
+        }
+
+        $file = $request->file('file');
+        if (! $request->user()->canStore((int) $file->getSize())) {
+            return response()->json(['message' => 'Storage limit reached — delete some media or upgrade your plan for more space.'], 422);
+        }
+
+        $disk = config('media.disk');
+        $previous = $item->image;
+
+        $media = Media::create([
+            'user_id' => $request->user()->id,
+            'world_id' => $item->world_id,
+            'disk' => $disk,
+            'path' => $file->store('media', $disk),
+            'filename' => $file->getClientOriginalName(),
+            'mime' => $file->getClientMimeType(),
+            'size' => $file->getSize(),
+        ]);
+
+        $item->update(['image_media_id' => $media->id]);
+
+        // Free the storage of the image we just replaced (the Media model deletes its own file).
+        $previous?->delete();
+
+        return response()->json(['image_url' => $media->url]);
+    }
+
+    /** Remove the entry's image, freeing its storage. */
+    public function removeImage(Request $request, CampaignCompendiumItem $item): JsonResponse
+    {
+        $this->authorize('update', $item);
+        abort_if($item->isLocked(), 403, 'Imported entries are read-only. Clone it to make an editable copy.');
+
+        $previous = $item->image;
+        $item->update(['image_media_id' => null]);
+        $previous?->delete();
+
+        return response()->json(['image_url' => null]);
     }
 
     /** Rebuild a monster's stat block + markdown from its preserved import source (Open5e). */
