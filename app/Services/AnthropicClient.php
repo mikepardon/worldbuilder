@@ -17,10 +17,11 @@ class AnthropicClient
 
     /**
      * The longest a synchronous web request may wait on the model. Cloudflare returns a 504 once the origin
-     * takes ~100s, so a web call must fail cleanly before then rather than hang into a gateway timeout.
+     * takes ~100s, so a web call must fail cleanly well before then rather than hang into a gateway timeout.
+     * Kept conservative to leave headroom for request overhead (auth, DB, response) under that ceiling.
      * Queue workers (CLI) are exempt — long batch generation there never passes through Cloudflare.
      */
-    protected const WEB_MAX_TIMEOUT = 85;
+    protected const WEB_MAX_TIMEOUT = 75;
 
     public function configured(): bool
     {
