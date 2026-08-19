@@ -10,6 +10,7 @@ use App\Jobs\TranscribeRecap;
 use App\Models\Recap;
 use App\Models\RecapEntity;
 use App\Models\Session;
+use App\Services\AnthropicClient;
 use App\Support\CreditWeights;
 use App\Support\RecapEntityPresenter;
 use App\Support\Webhooks;
@@ -106,6 +107,64 @@ class RecapController extends Controller
         ]);
 
         dispatch(new TranscribeRecap($recap));
+
+        return response()->json($this->payload($recap), 202);
+    }
+
+    /**
+     * Create a recap from pasted text (a transcript or the GM's own notes) instead of audio. Runs the exact
+     * same analysis as an audio recap, just skipping transcription — the text becomes the transcript.
+     */
+    public function storeText(Request $request, Session $session): JsonResponse
+    {
+        $this->authorize('manage', $session->campaign);
+
+        $data = $request->validate([
+            'text' => ['required', 'string', 'min:50', 'max:100000'],
+            'detail_level' => ['sometimes', 'in:brief,comprehensive'],
+        ]);
+
+        if (! app(AnthropicClient::class)->configured()) {
+            return response()->json(['message' => "AI isn't set up on this server yet."], 422);
+        }
+
+        $text = trim($data['text']);
+
+        // There's no audio length to price by, so estimate an equivalent spoken duration (~150 words/minute)
+        // and reuse the same per-hour recap pricing as audio, with a one-credit floor.
+        $duration = max(60, (int) ceil(str_word_count($text) / 150 * 60));
+
+        $user = $request->user();
+        $cost = CreditWeights::recapCreditCost($duration);
+        if (! $user->canSpendAiCredits($cost)) {
+            return response()->json([
+                'message' => "This recap costs {$cost} credits — you have {$user->aiCreditsRemaining()}. Top up or upgrade for more.",
+                'outOfCredits' => true,
+                'requiredCredits' => $cost,
+            ], 402);
+        }
+
+        // One recap per session: replace any existing one (and tidy up its stored audio).
+        $existing = $session->recap;
+        if ($existing !== null) {
+            $this->deleteAudio($existing);
+            $existing->delete();
+        }
+
+        $recap = $session->recap()->create([
+            'user_id' => $user->id,
+            'disk' => '',
+            'path' => '',
+            'original_name' => null,
+            'duration_seconds' => $duration,
+            'size_bytes' => 0,
+            'detail_level' => $data['detail_level'] ?? $session->campaign->world->defaultRecapDetail(),
+            'status' => 'analyzing',
+            'transcript' => $text,
+        ]);
+
+        // Straight to analysis — no transcription step. Billed on success like an audio recap.
+        dispatch(new AnalyseRecap($recap));
 
         return response()->json($this->payload($recap), 202);
     }
@@ -372,6 +431,8 @@ class RecapController extends Controller
             'transcription_request_id' => $recap->transcription_request_id,
             'detail_level' => $recap->detail_level,
             'original_name' => $recap->original_name,
+            // Text recaps have no audio: the UI skips the transcription step and offers re-analyse over retry.
+            'has_audio' => $recap->hasAudio(),
             'rating' => $recap->rating,
             'transcript' => $recap->transcript,
             'recap_full' => $recap->recap_full,

@@ -256,6 +256,46 @@ class RecapTest extends TestCase
             ->assertNotFound();
     }
 
+    public function test_a_recap_can_be_created_from_pasted_text_without_transcription(): void
+    {
+        $this->fakeAnalysis();
+
+        $gm = User::factory()->create(['ai_credit_balance' => 1000]);
+        $creditsBefore = $gm->aiCreditsRemaining();
+        $session = $this->sessionFor($gm);
+
+        $this->actingAs($gm)->postJson(route('sessions.recap.text', $session), [
+            'text' => str_repeat('The party rang the drowned bell and fought the Ashen Concord. ', 20),
+            'detail_level' => 'comprehensive',
+        ])->assertStatus(202);
+
+        $recap = $session->fresh()->recap;
+        $this->assertSame('done', $recap->status);
+        $this->assertFalse($recap->hasAudio());
+        $this->assertSame('', $recap->path);
+        $this->assertStringContainsString('drowned bell', (string) $recap->transcript);
+        // The same analysis ran and produced the recap variants.
+        $this->assertNotNull($recap->recap_full);
+        // Billed on success like an audio recap.
+        $this->assertLessThan($creditsBefore, $gm->fresh()->aiCreditsRemaining());
+    }
+
+    public function test_a_text_recap_is_blocked_when_out_of_credits(): void
+    {
+        $this->fakeAnalysis();
+
+        $gm = User::factory()->create([
+            'ai_credit_balance' => 0, 'daily_ai_used' => 5, 'daily_ai_reset_on' => now()->toDateString(),
+        ]);
+        $session = $this->sessionFor($gm);
+
+        $this->actingAs($gm)->postJson(route('sessions.recap.text', $session), [
+            'text' => str_repeat('word ', 400),
+        ])->assertStatus(402);
+
+        $this->assertNull($session->fresh()->recap);
+    }
+
     public function test_analysis_auto_links_an_entity_that_already_exists_in_the_world(): void
     {
         Storage::fake('s3');

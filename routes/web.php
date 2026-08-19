@@ -308,6 +308,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // endpoints, then `store` records it and queues the analysis; the recap page polls `status`.
     Route::get('/sessions/{session}/recap', [RecapController::class, 'show'])->name('sessions.recap.show');
     Route::post('/sessions/{session}/recap', [RecapController::class, 'store'])->name('sessions.recap.store');
+    Route::post('/sessions/{session}/recap/text', [RecapController::class, 'storeText'])->name('sessions.recap.text');
     Route::post('/sessions/{session}/recap/retry', [RecapController::class, 'retry'])->name('sessions.recap.retry');
     Route::post('/sessions/{session}/recap/reanalyse', [RecapController::class, 'reanalyse'])->name('sessions.recap.reanalyse');
     Route::get('/sessions/{session}/recap/status', [RecapController::class, 'status'])->name('sessions.recap.status');

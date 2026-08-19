@@ -61,7 +61,13 @@ const STAGES = [
 ];
 
 const processing = computed(() =>
-    STAGES.some((s) => s.key === recap.value?.status),
+    ["queued", "transcribing", "analyzing"].includes(recap.value?.status),
+);
+// A text recap skips transcription, so its stepper shows only the analysis stage.
+const stages = computed(() =>
+    recap.value?.has_audio === false
+        ? [{ key: "analyzing", label: "Analysing" }]
+        : STAGES,
 );
 const done = computed(() => recap.value?.status === "done");
 const failed = computed(() => recap.value?.status === "failed");
@@ -71,7 +77,7 @@ const showUploader = computed(
 
 // Which stage is in flight; drives the stepper (earlier = done, later = pending).
 const stepIndex = computed(() =>
-    STAGES.findIndex((s) => s.key === recap.value?.status),
+    stages.value.findIndex((s) => s.key === recap.value?.status),
 );
 
 function stepState(index) {
@@ -135,6 +141,32 @@ function onCreated(payload) {
     polls.value = 0;
     pollFails = 0;
     poll();
+}
+
+// Empty-state input mode: record/upload audio, or paste a transcript/notes for the same analysis.
+const uploadMode = ref("audio"); // audio | text
+const pastedText = ref("");
+const textDetail = ref("comprehensive");
+const submittingText = ref(false);
+const textError = ref("");
+
+async function submitText() {
+    if (pastedText.value.trim().length < 50 || submittingText.value) return;
+    submittingText.value = true;
+    textError.value = "";
+    try {
+        const res = await window.axios.post(
+            route("sessions.recap.text", props.session.id),
+            { text: pastedText.value, detail_level: textDetail.value },
+        );
+        onCreated(res.data);
+    } catch (error) {
+        textError.value =
+            error?.response?.data?.message ||
+            "Couldn’t start — please try again.";
+    } finally {
+        submittingText.value = false;
+    }
 }
 
 function poll() {
@@ -480,16 +512,66 @@ onBeforeUnmount(() => {
                 </div>
             </div>
 
-            <!-- Uploader (no recap yet) -->
+            <!-- Uploader (no recap yet): audio upload, or paste text for the same analysis -->
             <div v-if="showUploader" class="panel max-w-2xl p-5">
-                <RecapUploader :session="session" @created="onCreated" />
+                <div class="mb-4 flex w-fit gap-0.5 rounded-md border border-edge2 p-0.5 text-sm">
+                    <button
+                        class="rounded px-3 py-1"
+                        :class="uploadMode === 'audio' ? 'bg-raised text-bright' : 'text-muted hover:text-ink'"
+                        @click="uploadMode = 'audio'"
+                    >
+                        Record / upload audio
+                    </button>
+                    <button
+                        class="rounded px-3 py-1"
+                        :class="uploadMode === 'text' ? 'bg-raised text-bright' : 'text-muted hover:text-ink'"
+                        @click="uploadMode = 'text'"
+                    >
+                        Paste text
+                    </button>
+                </div>
+
+                <RecapUploader v-if="uploadMode === 'audio'" :session="session" @created="onCreated" />
+
+                <form v-else class="space-y-3" @submit.prevent="submitText">
+                    <p class="text-sm text-muted">
+                        Paste a transcript or your own notes of the session. The AI writes the recap, moments,
+                        outline and entities from it — no audio needed. Costs credits by length, like an audio recap.
+                    </p>
+                    <textarea
+                        v-model="pastedText"
+                        rows="12"
+                        class="w-full rounded border border-edge2 bg-night/40 p-2 font-mono text-[13px] leading-relaxed text-ink"
+                        placeholder="Paste the session transcript or notes here…"
+                    ></textarea>
+                    <p v-if="textError" class="text-xs text-amber">{{ textError }}</p>
+                    <div class="flex items-center justify-between">
+                        <label class="flex items-center gap-2 text-xs text-muted">
+                            Detail
+                            <select
+                                v-model="textDetail"
+                                class="rounded border border-edge2 bg-night/60 px-2 py-1 text-xs text-ink"
+                            >
+                                <option value="comprehensive">Comprehensive</option>
+                                <option value="brief">Brief</option>
+                            </select>
+                        </label>
+                        <button
+                            type="submit"
+                            class="rounded bg-amber/90 px-3 py-1.5 text-sm font-medium text-night hover:bg-amber disabled:opacity-60"
+                            :disabled="pastedText.trim().length < 50 || submittingText"
+                        >
+                            {{ submittingText ? "Starting…" : "Generate recap" }}
+                        </button>
+                    </div>
+                </form>
             </div>
 
             <!-- Processing -->
             <div v-else-if="processing" class="panel max-w-2xl space-y-5 p-8">
                 <!-- Stage stepper -->
                 <ol class="flex items-center justify-center gap-1.5 text-xs">
-                    <template v-for="(stage, i) in STAGES" :key="stage.key">
+                    <template v-for="(stage, i) in stages" :key="stage.key">
                         <li class="flex items-center gap-1.5">
                             <span
                                 class="flex h-5 w-5 items-center justify-center rounded-full border text-[10px]"
@@ -520,7 +602,7 @@ onBeforeUnmount(() => {
                             </span>
                         </li>
                         <li
-                            v-if="i < STAGES.length - 1"
+                            v-if="i < stages.length - 1"
                             class="h-px w-6"
                             :class="i < stepIndex ? 'bg-amber' : 'bg-edge3'"
                         ></li>
@@ -560,6 +642,7 @@ onBeforeUnmount(() => {
                 </p>
                 <div class="flex gap-2">
                     <button
+                        v-if="recap.has_audio"
                         class="rounded bg-amber/90 px-3 py-1.5 text-sm font-medium text-night hover:bg-amber disabled:opacity-60"
                         :disabled="retrying"
                         @click="retryTranscription"
@@ -567,10 +650,18 @@ onBeforeUnmount(() => {
                         {{ retrying ? "Retrying…" : "Retry transcription" }}
                     </button>
                     <button
+                        v-else
+                        class="rounded bg-amber/90 px-3 py-1.5 text-sm font-medium text-night hover:bg-amber disabled:opacity-60"
+                        :disabled="reanalysing"
+                        @click="reanalyse"
+                    >
+                        {{ reanalysing ? "Re-analysing…" : "Re-analyse" }}
+                    </button>
+                    <button
                         class="rounded border border-edge3 px-3 py-1.5 text-sm text-muted hover:text-ink"
                         @click="replace"
                     >
-                        Upload again
+                        {{ recap.has_audio ? "Upload again" : "Start over" }}
                     </button>
                 </div>
             </div>

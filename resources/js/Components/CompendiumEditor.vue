@@ -45,9 +45,24 @@ const isMonster = computed(() => props.item.item_type === "monster");
 const locked = computed(() => !props.admin && !!props.item.locked);
 const showClaude = computed(() => !!props.draftRoute && !locked.value);
 
-const preview = reactive({ frame: true, wide: true });
+const preview = reactive({ frame: true, wide: true, code: false });
 const gridCols = computed(() =>
     showClaude.value ? "360px minmax(0,1fr) 380px" : "360px minmax(0,1fr)",
+);
+
+// The entry's data exactly as it's stored, for the "code" view: a monster's stat block or a structured
+// type's fields as JSON, or a freeform entry's Markdown source.
+const storedCode = computed(() => {
+    if (isMonster.value) return JSON.stringify(form.block ?? {}, null, 2);
+    if (props.fieldSchema.length) return JSON.stringify(form.fields ?? {}, null, 2);
+    return form.document ?? "";
+});
+const codeCaption = computed(() =>
+    preview.code
+        ? "The entry's data, exactly as it's stored."
+        : isMonster.value
+          ? "How it looks when embedded on a page."
+          : "How it renders on a page.",
 );
 
 const form = reactive({
@@ -945,42 +960,48 @@ const removeImage = () => {
                     >
                         Preview
                     </div>
-                    <template v-if="isMonster">
-                        <div
-                            class="flex items-center gap-0.5 rounded-full border border-edge3 bg-[#1a1d24] p-[3px]"
+                    <!-- Stat block display options (monsters only) -->
+                    <div
+                        v-if="isMonster"
+                        class="flex items-center gap-0.5 rounded-full border border-edge3 bg-[#1a1d24] p-[3px]"
+                    >
+                        <button
+                            class="rounded-full px-3 py-1 font-mono text-[10.5px] tracking-[0.1em]"
+                            :class="preview.frame ? 'bg-amber text-night' : 'text-muted'"
+                            @click="preview.frame = !preview.frame"
                         >
-                            <button
-                                class="rounded-full px-3 py-1 font-mono text-[10.5px] tracking-[0.1em]"
-                                :class="
-                                    preview.frame
-                                        ? 'bg-amber text-night'
-                                        : 'text-muted'
-                                "
-                                @click="preview.frame = !preview.frame"
-                            >
-                                FRAMED
-                            </button>
-                            <button
-                                class="rounded-full px-3 py-1 font-mono text-[10.5px] tracking-[0.1em]"
-                                :class="
-                                    preview.wide
-                                        ? 'bg-amber text-night'
-                                        : 'text-muted'
-                                "
-                                @click="preview.wide = !preview.wide"
-                            >
-                                WIDE
-                            </button>
-                        </div>
-                        <div class="text-[13px] font-light text-faint">
-                            How it looks when embedded on a page.
-                        </div>
-                    </template>
+                            FRAMED
+                        </button>
+                        <button
+                            class="rounded-full px-3 py-1 font-mono text-[10.5px] tracking-[0.1em]"
+                            :class="preview.wide ? 'bg-amber text-night' : 'text-muted'"
+                            @click="preview.wide = !preview.wide"
+                        >
+                            WIDE
+                        </button>
+                    </div>
+                    <!-- Raw stored data — available for every entry type -->
+                    <button
+                        class="rounded-full border border-edge3 px-3 py-1 font-mono text-[10.5px] tracking-[0.1em]"
+                        :class="preview.code ? 'bg-amber text-night' : 'text-muted'"
+                        title="View the entry's data exactly as it's stored"
+                        @click="preview.code = !preview.code"
+                    >
+                        CODE
+                    </button>
+                    <div class="text-[13px] font-light text-faint">
+                        {{ codeCaption }}
+                    </div>
                 </div>
                 <div
                     class="flex min-h-0 flex-1 justify-center overflow-auto p-6"
                 >
+                    <pre
+                        v-if="preview.code"
+                        class="w-full max-w-[820px] select-text overflow-auto rounded-md border border-edge2 bg-[#0b0d10] p-4 font-mono text-[12px] leading-relaxed text-ink"
+                    >{{ storedCode || "— nothing stored yet —" }}</pre>
                     <div
+                        v-else
                         class="w-full"
                         :class="
                             isMonster && preview.wide
