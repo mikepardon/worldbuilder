@@ -35,18 +35,8 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Keep runs bounded — this is billed per token and per Actions minute.
-          claude_args: "--max-turns 25 --allowedTools Bash,Edit,Read,Write,Glob,Grep"
-          # Sentry's hosted MCP server lets Claude pull breadcrumbs, related
-          # issues and regression history itself instead of relying on the prompt.
-          mcp_config: |
-            {
-              "mcpServers": {
-                "sentry": {
-                  "type": "http",
-                  "url": "https://mcp.sentry.dev/mcp"
-                }
-              }
-            }
+          # Bounded, but generous enough to read the repo, fix and open the PR.
+          claude_args: "--max-turns 80 --allowedTools Bash,Edit,Read,Write,Glob,Grep"
           prompt: |
             A production error was reported by Sentry.
 
@@ -61,6 +51,9 @@ jobs:
 
             Stack:
             ${{ github.event.client_payload.stack }}
+
+            Work efficiently: you have a limited number of turns, so avoid
+            broad exploration and go straight to the failing frames.
 
             Do this:
             1. Open the files at the failing frames and confirm or correct the diagnosis.
