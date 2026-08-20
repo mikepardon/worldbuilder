@@ -103,7 +103,9 @@ class RecapAnalyzer
         );
 
         $data = AiJson::object($reply);
-        if ($data === null) {
+        // A reply cut off by the model's output cap is salvaged up to the last complete field, so also
+        // insist on an actual recap body — never mark a recap done with nothing in it.
+        if ($data === null || trim((string) ($data['recap_full'] ?? '')) === '') {
             throw new RuntimeException('The assistant did not return a usable recap analysis.');
         }
 
