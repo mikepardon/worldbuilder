@@ -127,7 +127,7 @@ class WorldController extends Controller
                 'campaign' => $latest->campaign?->name,
                 'held_on' => $latest->held_on?->toDateString(),
                 'recap_status' => $latest->recap?->status,
-                'edit_url' => route('sessions.edit', $latest->id),
+                'edit_url' => route('sessions.edit', [$world->id, $latest->campaign_id, $latest->id]),
                 'view_url' => route('sessions.view', $latest->id),
             ],
         ]);

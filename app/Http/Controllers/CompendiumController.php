@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Jobs\DraftCompendiumEntry;
+use App\Models\AiRequest;
 use App\Models\CampaignCompendiumItem;
 use App\Models\CompendiumItem;
 use App\Models\Media;
@@ -12,7 +14,6 @@ use App\Services\AnthropicClient;
 use App\Services\CompendiumDrafter;
 use App\Services\CritterDbClient;
 use App\Services\Open5eClient;
-use App\Support\AiUsageContext;
 use App\Support\Compendium;
 use App\Support\CreditWeights;
 use App\Support\CompendiumFields;
@@ -27,7 +28,6 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use RuntimeException;
-use Throwable;
 
 class CompendiumController extends Controller
 {
@@ -388,11 +388,11 @@ class CompendiumController extends Controller
     }
 
     /**
-     * Structured Claude draft for a compendium entry: fills the monster stat block (or the Markdown
-     * document for other types) plus the summary, so the editor can apply it directly. Counts against
-     * the world's AI budget, exactly like ai() above.
+     * Start a Claude draft for a compendium entry on the queue. The model call runs in {@see DraftCompendiumEntry}
+     * (off the web request, so it can't hit the gateway timeout); this returns a handle the editor polls via
+     * {@see AiRequestController::show()}. Credits are pre-checked here and billed by the job on success.
      */
-    public function draft(Request $request, CampaignCompendiumItem $item, CompendiumDrafter $drafter)
+    public function draft(Request $request, CampaignCompendiumItem $item, CompendiumDrafter $drafter): JsonResponse
     {
         $this->authorize('update', $item);
         abort_if($item->isLocked(), 403, 'Imported entries are read-only. Clone it to make an editable copy.');
@@ -406,12 +406,9 @@ class CompendiumController extends Controller
         ]);
 
         if (! $drafter->configured()) {
-            return response()->json([
-                'message' => "AI isn't set up on this server yet.",
-            ], 422);
+            return response()->json(['message' => "AI isn't set up on this server yet."], 422);
         }
 
-        $world = $item->world;
         $user = $request->user();
         $cost = CreditWeights::forFeature('compendium_draft', $item->item_type);
         if (! $user->canSpendAiCredits($cost)) {
@@ -421,30 +418,20 @@ class CompendiumController extends Controller
             ], 402);
         }
 
-        $currentBlock = (array) (data_get($item->fields, 'block') ?? Statblock::empty());
-        $currentFields = (array) ($item->fields ?? []);
-        $document = $input['document'] ?? $item->document ?? '';
-
-        try {
-            $result = $drafter->draft(
-                $item->item_type, $item->name, $world->name, $currentBlock, $currentFields, $document, $input['prompt'], $input['history'] ?? [],
-                new AiUsageContext('compendium_draft', $world->id, $request->user()->id, $item->item_type),
-            );
-        } catch (Throwable $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-
-        if ($result === null) {
-            return response()->json(['message' => 'The AI returned an unexpected response. Please try again.'], 422);
-        }
-
-        // Only a successful generation is billed — against the user's credit balance.
-        $user->spendAiCredits($cost);
-
-        return response()->json([
-            ...$result,
-            'ai' => ['creditsRemaining' => $user->aiCreditsRemaining()],
+        $aiRequest = AiRequest::create([
+            'uuid' => (string) Str::uuid(),
+            'user_id' => $user->id,
+            'feature' => 'compendium_draft',
+            'status' => 'pending',
         ]);
+
+        dispatch(new DraftCompendiumEntry(
+            $aiRequest, $item, $user->id, $cost, $input['prompt'],
+            $input['document'] ?? $item->document ?? '', $input['history'] ?? [],
+        ));
+
+        // Reflect DB truth: with a sync queue the job has already run; on a real queue it's still pending.
+        return response()->json($aiRequest->refresh()->toStatusArray(), 202);
     }
 
     /** Attach (or replace) the entry's image. Uppy posts the file here and expects JSON. */

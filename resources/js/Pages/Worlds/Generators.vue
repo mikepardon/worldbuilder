@@ -3,6 +3,7 @@ import CreditCost from "@/Components/CreditCost.vue";
 import StatblockCard from "@/Components/StatblockCard.vue";
 import StatblockEditor from "@/Components/StatblockEditor.vue";
 import WorldLayout from "@/Layouts/WorldLayout.vue";
+import { captureError } from "@/monitoring";
 import { Head, router, usePage } from "@inertiajs/vue3";
 import { computed, reactive, ref } from "vue";
 
@@ -75,6 +76,7 @@ const generate = () => {
             batches.value = res.data.batches ?? batches.value;
         })
         .catch((e) => {
+            captureError(e);
             error.value = e.response?.data?.message ?? "Something went wrong — please try again.";
         })
         .finally(() => {
@@ -94,7 +96,8 @@ const reopenBatch = (batch) => {
             openBatchId.value = batch.id;
             editingIndex.value = null;
         })
-        .catch(() => {
+        .catch((e) => {
+            captureError(e);
             error.value = "Couldn't reopen that batch.";
         });
 };
@@ -112,6 +115,7 @@ const saveBatch = () => {
             window.setTimeout(() => (savedFlash.value = false), 1500);
         })
         .catch((e) => {
+            captureError(e);
             error.value = e.response?.data?.message ?? "Couldn't save changes.";
         });
 };

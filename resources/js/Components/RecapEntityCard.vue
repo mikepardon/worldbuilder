@@ -1,4 +1,5 @@
 <script setup>
+import { captureError } from "@/monitoring";
 import { computed, ref } from "vue";
 
 const props = defineProps({
@@ -61,6 +62,7 @@ async function send(request) {
         emit("updated", res.data);
         mode.value = "view";
     } catch (e) {
+        captureError(e);
         error.value = errMsg(e);
     } finally {
         busy.value = false;
@@ -105,7 +107,8 @@ function search() {
                 { params: { q: query.value } },
             );
             candidates.value = res.data.candidates ?? [];
-        } catch {
+        } catch (error) {
+            captureError(error);
             candidates.value = [];
         } finally {
             searching.value = false;

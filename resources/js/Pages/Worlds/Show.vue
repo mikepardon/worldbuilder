@@ -1,5 +1,6 @@
 <script setup>
 import WorldLayout from "@/Layouts/WorldLayout.vue";
+import { captureError } from "@/monitoring";
 import { Head, Link, router } from "@inertiajs/vue3";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
@@ -78,6 +79,7 @@ const startBuild = async () => {
         build.value = res.data.build;
         schedulePoll();
     } catch (error) {
+        captureError(error);
         build.value = null;
         buildError.value =
             error.response?.data?.message ||

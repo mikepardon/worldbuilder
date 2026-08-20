@@ -44,6 +44,9 @@ class HandleInertiaRequests extends Middleware
             // Public broadcast settings for the Echo client — null (realtime off) unless a Pusher-
             // protocol broadcaster (Reverb or Pusher/soketi) is active. The secret is never exposed.
             'broadcast' => $this->broadcastConfig(),
+            // Public config for the browser Sentry SDK — null (front-end reporting off) unless a browser
+            // DSN is configured. The DSN is public by design; no secret is exposed.
+            'sentry' => $this->sentryConfig(),
             // The assistant's product name (e.g. "Muse"). The underlying model is never shared to users.
             'ai' => ['name' => fn () => AiModels::name()],
             // The signed-in GM's AI credit standing and the per-action cost schedule, so the header pill
@@ -70,6 +73,28 @@ class HandleInertiaRequests extends Middleware
             'daily_used' => $user->aiUsedToday(),
             'balance' => (int) $user->ai_credit_balance,
             'costs' => CreditWeights::uiCostMap(),
+        ];
+    }
+
+    /**
+     * The client-safe Sentry config for the browser SDK, or null when no browser DSN is configured (which
+     * leaves the front-end SDK uninitialised, so its capture calls become no-ops). Environment and release
+     * are shared with the back-end so front-end and back-end events line up.
+     *
+     * @return array{dsn: string, environment: string|null, release: string|null, tracesSampleRate: float}|null
+     */
+    private function sentryConfig(): ?array
+    {
+        $dsn = config('services.sentry_browser.dsn');
+        if (blank($dsn)) {
+            return null;
+        }
+
+        return [
+            'dsn' => (string) $dsn,
+            'environment' => config('sentry.environment'),
+            'release' => config('sentry.release'),
+            'tracesSampleRate' => (float) config('services.sentry_browser.traces_sample_rate'),
         ];
     }
 

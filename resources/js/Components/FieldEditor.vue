@@ -4,6 +4,7 @@ import EntryPicker from "@/Components/EntryPicker.vue";
 import EntrySettings from "@/Components/EntrySettings.vue";
 import LocationMapEditor from "@/Components/LocationMapEditor.vue";
 import RenderedContent from "@/Components/RenderedContent.vue";
+import { captureError } from "@/monitoring";
 import { Link, router, usePage } from "@inertiajs/vue3";
 import { marked } from "marked";
 import { computed, nextTick, reactive, ref, watch } from "vue";
@@ -462,6 +463,7 @@ const send = async (text) => {
             undo,
         });
     } catch (e) {
+        captureError(e);
         chatError.value = e.response?.data?.message ?? "The AI request failed.";
     } finally {
         asking.value = false;

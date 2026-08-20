@@ -44,6 +44,9 @@ return [
         // Billing
         'billing.*',
 
+        // Async AI request polling
+        'ai.*',
+
         // Storage breakdown
         'storage.*',
 

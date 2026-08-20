@@ -30,6 +30,35 @@ class AuthenticationTest extends TestCase
         $response->assertRedirect(route('dashboard', absolute: false));
     }
 
+    public function test_remember_me_sets_the_recaller_token(): void
+    {
+        // Start with no token so we're proving remember-me set it (the factory seeds one by default).
+        $user = User::factory()->create(['remember_token' => null]);
+
+        $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'password',
+            'remember' => true,
+        ]);
+
+        $this->assertAuthenticated();
+        // Auth::attempt(..., remember: true) persists a recaller token on the user.
+        $this->assertNotNull($user->fresh()->remember_token);
+    }
+
+    public function test_login_without_remember_me_leaves_no_recaller_token(): void
+    {
+        $user = User::factory()->create(['remember_token' => null]);
+
+        $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'password',
+        ]);
+
+        $this->assertAuthenticated();
+        $this->assertNull($user->fresh()->remember_token);
+    }
+
     public function test_users_can_not_authenticate_with_invalid_password(): void
     {
         $user = User::factory()->create();

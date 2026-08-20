@@ -391,6 +391,8 @@ class DocumentController extends Controller
                 new AiUsageContext('session_writeup', $world->id, $user->id),
             );
         } catch (Throwable $e) {
+            report($e);
+
             return response()->json(['message' => $e->getMessage()], 422);
         }
 

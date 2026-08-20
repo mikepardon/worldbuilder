@@ -58,6 +58,8 @@ class AiController extends Controller
         try {
             $reply = $ai->chat($system, $messages, 1500, new AiUsageContext('assistant_ask', $world->id, $user->id));
         } catch (Throwable $e) {
+            report($e);
+
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
@@ -145,6 +147,8 @@ class AiController extends Controller
         try {
             $raw = $ai->chat($system, $messages, 2400, new AiUsageContext('assistant_draft', $world->id, $user->id, $document->kind));
         } catch (Throwable $e) {
+            report($e);
+
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
@@ -221,6 +225,8 @@ class AiController extends Controller
         try {
             $raw = $ai->chat($system, $messages, 2000, new AiUsageContext('assistant_bloodline', $world->id, $user->id, 'bloodline'));
         } catch (Throwable $e) {
+            report($e);
+
             return response()->json(['message' => $e->getMessage()], 422);
         }
 

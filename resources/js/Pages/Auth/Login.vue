@@ -1,4 +1,5 @@
 <script setup>
+import Checkbox from '@/Components/Checkbox.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 
 defineProps({
@@ -57,6 +58,11 @@ const submit = () => {
                     <span class="font-mono text-[10px] uppercase tracking-[0.16em] text-faint">Password</span>
                     <input v-model="form.password" type="password" required placeholder="••••••••" class="rounded-[7px] border border-edge3 bg-[#1a1d24] px-3.5 py-3 text-[15.5px] text-ink focus:border-teal focus:ring-0" />
                     <span v-if="form.errors.password" class="text-sm text-red-400">{{ form.errors.password }}</span>
+                </label>
+
+                <label class="flex select-none items-center gap-2 text-sm text-muted">
+                    <Checkbox v-model:checked="form.remember" />
+                    Remember me
                 </label>
 
                 <button type="submit" :disabled="form.processing" class="mt-0.5 rounded-[7px] bg-amber py-3 text-center font-display text-[16px] text-night transition hover:bg-[#eab255] disabled:opacity-50">

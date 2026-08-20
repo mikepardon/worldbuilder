@@ -45,9 +45,9 @@ class WorldSessionController extends Controller
                 'attendees' => $session->attendees->map(fn (User $user): array => ['id' => $user->id, 'name' => $user->name])->all(),
                 'attendee_ids' => $session->attendees->pluck('id')->all(),
                 'recap_status' => $session->recap?->status,
-                'edit_url' => route('sessions.edit', $session->id),
+                'edit_url' => route('sessions.edit', [$world->id, $session->campaign_id, $session->id]),
                 'view_url' => route('sessions.view', $session->id),
-                'recap_url' => route('sessions.recap.show', $session->id),
+                'recap_url' => route('sessions.recap.show', [$world->id, $session->campaign_id, $session->id]),
             ])
             ->all();
 

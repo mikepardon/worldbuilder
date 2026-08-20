@@ -1,13 +1,15 @@
 <script setup>
-import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
+import WorldLayout from "@/Layouts/WorldLayout.vue";
 import RecapUploader from "@/Components/RecapUploader.vue";
 import RecapEntityCard from "@/Components/RecapEntityCard.vue";
 import RecapGuidance from "@/Components/RecapGuidance.vue";
 import Markdown from "@/Components/Markdown.vue";
+import { captureError } from "@/monitoring";
 import { Head, Link } from "@inertiajs/vue3";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 const props = defineProps({
+    world: { type: Object, required: true },
     session: { type: Object, required: true },
     campaign: { type: Object, required: true },
     recap: { type: Object, default: null },
@@ -161,6 +163,7 @@ async function submitText() {
         );
         onCreated(res.data);
     } catch (error) {
+        captureError(error);
         textError.value =
             error?.response?.data?.message ||
             "Couldn’t start — please try again.";
@@ -201,7 +204,10 @@ function setRating(n) {
     recap.value.rating = n;
     window.axios
         .put(route("sessions.recap.rate", props.session.id), { rating: n })
-        .catch(() => (recap.value.rating = previous));
+        .catch((error) => {
+            captureError(error);
+            recap.value.rating = previous;
+        });
 }
 
 async function retryTranscription() {
@@ -216,6 +222,7 @@ async function retryTranscription() {
         pollFails = 0;
         poll();
     } catch (error) {
+        captureError(error);
         retryError.value =
             error?.response?.data?.message ||
             "Couldn’t retry just now — please try again.";
@@ -237,6 +244,7 @@ async function reanalyse() {
         pollFails = 0;
         poll();
     } catch (error) {
+        captureError(error);
         recap.value = {
             ...recap.value,
             status: "failed",
@@ -342,7 +350,8 @@ async function toggleShare() {
                   route("sessions.recap.share", props.session.id),
               );
         recap.value = res.data;
-    } catch {
+    } catch (error) {
+        captureError(error);
         // Leave the current sharing state as-is on failure.
     } finally {
         sharing.value = false;
@@ -412,7 +421,8 @@ async function replace() {
         await window.axios.delete(
             route("sessions.recap.destroy", props.session.id),
         );
-    } catch {
+    } catch (error) {
+        captureError(error);
         // Even if the delete fails, drop to the uploader so the GM can retry.
     }
     recap.value = null;
@@ -432,12 +442,12 @@ onBeforeUnmount(() => {
 <template>
     <Head :title="`${session.title} · Recap`" />
 
-    <AuthenticatedLayout>
+    <WorldLayout :world="world">
         <div class="mx-auto w-full max-w-6xl px-4 py-6">
             <!-- Header -->
             <div class="mb-5 flex flex-wrap items-center gap-3">
                 <Link
-                    :href="route('sessions.edit', session.id)"
+                    :href="route('sessions.edit', [world.id, campaign.id, session.id])"
                     class="text-sm text-muted hover:text-amber"
                     >← {{ session.title }}</Link
                 >
@@ -1184,5 +1194,5 @@ onBeforeUnmount(() => {
                 </aside>
             </div>
         </div>
-    </AuthenticatedLayout>
+    </WorldLayout>
 </template>

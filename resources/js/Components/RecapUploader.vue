@@ -1,5 +1,6 @@
 <script setup>
 import { useCredits } from "@/composables/useCredits";
+import { captureError } from "@/monitoring";
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import Uppy from "@uppy/core";
 import Dashboard from "@uppy/dashboard";
@@ -125,6 +126,7 @@ function mountUppy() {
         lastUploadError = "";
     });
     uppy.on("upload-error", (file, err, response) => {
+        captureError(err);
         lastUploadError = uploadErrorMessage(err, response);
     });
     uppy.on("complete", (res) => onUploaded(res));
@@ -180,6 +182,7 @@ async function onUploaded(res) {
         }
         emit("created", res2.data);
     } catch (e) {
+        captureError(e);
         error.value =
             e?.response?.data?.message || "Could not start processing.";
         resetUppy();

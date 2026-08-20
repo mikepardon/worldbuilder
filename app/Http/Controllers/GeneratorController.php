@@ -108,6 +108,8 @@ class GeneratorController extends Controller
                 new AiUsageContext('generator', $world->id, $user->id, $data['kind']),
             );
         } catch (Throwable $e) {
+            report($e);
+
             return response()->json(['message' => $e->getMessage()], 422);
         }
 

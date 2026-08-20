@@ -40,6 +40,10 @@ class DeepgramWebhookController extends Controller
             $transcript = $transcriber->transcriptFromCallback($request->all());
             $duration = $transcriber->durationSecondsFromCallback($request->all());
         } catch (Throwable $e) {
+            // Machine-to-machine path with no user watching: surface the failure to Sentry, not just onto
+            // the recap. An unexpected parse/provider error here would otherwise be invisible.
+            report($e);
+
             $recap->markFailed('Transcription failed unexpectedly ('.class_basename($e).'). Please try again.');
 
             // Acknowledge so Deepgram doesn't retry a payload that will never parse; the failure is recorded.

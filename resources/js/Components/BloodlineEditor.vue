@@ -1,6 +1,7 @@
 <script setup>
 import BloodlineChart from "@/Components/BloodlineChart.vue";
 import EntryPicker from "@/Components/EntryPicker.vue";
+import { captureError } from "@/monitoring";
 import { Link, router } from "@inertiajs/vue3";
 import { computed, reactive, ref, watch } from "vue";
 
@@ -262,6 +263,7 @@ const send = async () => {
             added: added.length,
         });
     } catch (e) {
+        captureError(e);
         muse.error = e.response?.data?.message || "Muse request failed.";
     } finally {
         muse.loading = false;

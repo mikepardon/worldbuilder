@@ -175,8 +175,17 @@ class RecapTest extends TestCase
         $gm = User::factory()->create();
         $session = $this->sessionFor($gm);
 
-        $this->actingAs($gm)->get(route('sessions.recap.show', $session))
+        $this->actingAs($gm)->get(route('sessions.recap.show', [$session->campaign->world_id, $session->campaign_id, $session->id]))
             ->assertInertia(fn ($page) => $page->component('Recaps/Show')->where('recap', null));
+    }
+
+    public function test_the_legacy_flat_recap_url_redirects_to_the_nested_one(): void
+    {
+        $gm = User::factory()->create();
+        $session = $this->sessionFor($gm);
+
+        $this->actingAs($gm)->get("/sessions/{$session->id}/recap")
+            ->assertRedirect(route('sessions.recap.show', [$session->campaign->world_id, $session->campaign_id, $session->id]));
     }
 
     public function test_a_non_gm_cannot_upload_or_view_a_recap(): void
@@ -187,7 +196,7 @@ class RecapTest extends TestCase
         $session = $this->sessionFor($gm, 'public');
         $intruder = User::factory()->create();
 
-        $this->actingAs($intruder)->get(route('sessions.recap.show', $session))->assertForbidden();
+        $this->actingAs($intruder)->get(route('sessions.recap.show', [$session->campaign->world_id, $session->campaign_id, $session->id]))->assertForbidden();
         $this->actingAs($intruder)->postJson(route('sessions.recap.store', $session), [
             'key' => "recaps/{$session->id}/x.wav",
             'detail_level' => 'comprehensive',

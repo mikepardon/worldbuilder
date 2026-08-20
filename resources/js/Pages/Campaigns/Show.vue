@@ -95,7 +95,7 @@ const removeSession = (session) => {
                     >
                         <div class="flex items-start justify-between gap-2 p-3">
                             <Link
-                                :href="route('sessions.edit', s.id)"
+                                :href="route('sessions.edit', [world.id, campaign.id, s.id])"
                                 class="min-w-0 flex-1 text-left"
                             >
                                 <div
@@ -123,7 +123,7 @@ const removeSession = (session) => {
                             </Link>
                             <div class="flex shrink-0 items-center gap-2">
                                 <Link
-                                    :href="route('sessions.edit', s.id)"
+                                    :href="route('sessions.edit', [world.id, campaign.id, s.id])"
                                     class="text-xs text-muted hover:text-amber"
                                     >Open ↗</Link
                                 >

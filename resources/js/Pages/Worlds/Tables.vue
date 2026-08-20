@@ -1,5 +1,6 @@
 <script setup>
 import WorldLayout from "@/Layouts/WorldLayout.vue";
+import { captureError } from "@/monitoring";
 import { Head, router, useForm } from "@inertiajs/vue3";
 import { computed, reactive, ref } from "vue";
 
@@ -283,6 +284,7 @@ const send = async () => {
             });
         }
     } catch (error) {
+        captureError(error);
         museError(error);
         muse.progress = "";
     } finally {

@@ -10,11 +10,13 @@ use App\Models\Character;
 use App\Models\Document;
 use App\Models\RecapEntity;
 use App\Models\Session;
+use App\Models\World;
 use App\Services\AnthropicClient;
 use App\Support\AiUsageContext;
 use App\Support\Compendium;
 use App\Support\CreditWeights;
 use App\Support\Sections;
+use App\Support\WorldNav;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -41,14 +43,12 @@ class SessionController extends Controller
     }
 
     /** Full-page session editor (markdown + Muse), mirroring the document editor. */
-    public function edit(Session $session): Response
+    public function edit(World $world, Campaign $campaign, Session $session): Response
     {
-        $this->authorize('manage', $session->campaign);
-
-        $campaign = $session->campaign;
-        $world = $campaign->world;
+        $this->authorize('manage', $campaign);
 
         return Inertia::render('Sessions/Edit', [
+            'world' => WorldNav::for($world),
             // BrewEditor's back link points at campaigns.show, which is nested under the world.
             'campaign' => ['id' => $campaign->id, 'world_id' => $campaign->world_id, 'name' => $campaign->name],
             'document' => [
@@ -228,6 +228,8 @@ class SessionController extends Controller
         try {
             $reply = $ai->chat($system, $messages, 1500, new AiUsageContext('session_writeup', $world->id, $user->id, 'session'));
         } catch (Throwable $e) {
+            report($e);
+
             return response()->json(['message' => $e->getMessage()], 422);
         }
 

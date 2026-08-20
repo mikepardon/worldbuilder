@@ -1,9 +1,10 @@
 <script setup>
-import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
+import WorldLayout from "@/Layouts/WorldLayout.vue";
 import BrewEditor from "@/Components/BrewEditor.vue";
 import { Head, Link } from "@inertiajs/vue3";
 
 const props = defineProps({
+    world: { type: Object, required: true },
     campaign: Object,
     document: Object,
     entries: { type: Array, default: () => [] },
@@ -18,7 +19,7 @@ const props = defineProps({
 <template>
     <Head :title="document.title" />
 
-    <AuthenticatedLayout flush>
+    <WorldLayout :world="world" flush>
         <BrewEditor
             :campaign="campaign"
             :document="document"
@@ -35,7 +36,7 @@ const props = defineProps({
             :write-up-tools="false"
         />
         <Link
-            :href="route('sessions.recap.show', props.document.id)"
+            :href="route('sessions.recap.show', [world.id, campaign.id, props.document.id])"
             class="fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded border border-edge3 bg-surface px-3 py-1.5 text-xs text-muted shadow-lg hover:text-ink"
             title="The post-play recap and analysis for this session"
         >
@@ -57,5 +58,5 @@ const props = defineProps({
             </svg>
             <span>Recap</span>
         </Link>
-    </AuthenticatedLayout>
+    </WorldLayout>
 </template>

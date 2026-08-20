@@ -3,6 +3,7 @@ import EntrySettings from "@/Components/EntrySettings.vue";
 import { useTextareaAutocomplete } from "@/composables/useTextareaAutocomplete";
 import { highlightBrewSource } from "@/lib/highlight";
 import HomebrewView from "@/Components/HomebrewView.vue";
+import { captureError } from "@/monitoring";
 import { Link, router, usePage } from "@inertiajs/vue3";
 import { marked } from "marked";
 import { computed, nextTick, reactive, ref, watch } from "vue";
@@ -400,6 +401,7 @@ const send = async (promptText) => {
         );
         messages.value.push({ role: "assistant", content: res.data.reply });
     } catch (e) {
+        captureError(e);
         chatError.value = e.response?.data?.message ?? "The AI request failed.";
     } finally {
         asking.value = false;
@@ -430,6 +432,7 @@ const writeUp = async () => {
         );
         router.visit(res.data.redirect);
     } catch (e) {
+        captureError(e);
         chatError.value = e.response?.data?.message ?? "The AI request failed.";
         writingUp.value = false;
     }

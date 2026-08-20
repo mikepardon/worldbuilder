@@ -174,6 +174,8 @@ class CompendiumController extends Controller
                 new AiUsageContext('compendium_admin', null, $request->user()->id, $item->item_type),
             );
         } catch (Throwable $e) {
+            report($e);
+
             return response()->json(['message' => $e->getMessage()], 422);
         }
 

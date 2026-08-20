@@ -149,6 +149,8 @@ class RollTableController extends Controller
         try {
             $raw = $ai->chat($system, $messages, $maxTokens, new AiUsageContext('roll_table', $world->id, $user->id, 'roll_table'), $timeout);
         } catch (Throwable $e) {
+            report($e);
+
             return response()->json(['message' => $e->getMessage()], 422);
         }
 

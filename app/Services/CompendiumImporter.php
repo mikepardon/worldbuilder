@@ -81,6 +81,10 @@ class CompendiumImporter
                 'finished_at' => now(),
             ]);
         } catch (Throwable $e) {
+            // Record the failure against the run for the user, but also surface it to Sentry — a broken
+            // import (provider error, mapping bug, malformed record) shouldn't be visible only as a failed row.
+            report($e);
+
             $run->update([
                 'status' => 'failed',
                 'added' => $added,

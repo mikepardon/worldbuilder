@@ -1,5 +1,6 @@
 <script setup>
 import UppyUploader from "@/Components/UppyUploader.vue";
+import { captureError } from "@/monitoring";
 import { router, useForm } from "@inertiajs/vue3";
 import { computed, reactive, ref, watch } from "vue";
 
@@ -208,9 +209,10 @@ const endPinDrag = (pin) => {
     pin.y = d.y;
     window.axios
         .put(route("map-pins.update", pin.id), { x: d.x, y: d.y })
-        .catch(() =>
-            router.reload({ preserveScroll: true, preserveState: true }),
-        );
+        .catch((error) => {
+            captureError(error);
+            router.reload({ preserveScroll: true, preserveState: true });
+        });
 };
 
 const pinForm = reactive({ saving: false });

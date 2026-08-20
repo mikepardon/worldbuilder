@@ -1,5 +1,6 @@
 <script setup>
 import WorldLayout from "@/Layouts/WorldLayout.vue";
+import { captureError } from "@/monitoring";
 import { Head } from "@inertiajs/vue3";
 import { computed, onBeforeUnmount, ref } from "vue";
 
@@ -60,7 +61,8 @@ const startPolling = () => {
                 route("worlds.ingest.status", [props.world.id, ingestion.value.id]),
             );
             setIngestion(data.ingestion);
-        } catch {
+        } catch (error) {
+            captureError(error);
             stopPolling();
         }
     }, 2000);
@@ -80,6 +82,7 @@ const start = async () => {
         });
         setIngestion(data.ingestion);
     } catch (e) {
+        captureError(e);
         error.value = e.response?.data?.message ?? "Could not start — please try again.";
     } finally {
         busy.value = false;
@@ -103,6 +106,7 @@ const apply = async () => {
         );
         setIngestion(data.ingestion);
     } catch (e) {
+        captureError(e);
         error.value = e.response?.data?.message ?? "Could not apply — please try again.";
     } finally {
         busy.value = false;
@@ -119,6 +123,7 @@ const resume = async () => {
         );
         setIngestion(data.ingestion);
     } catch (e) {
+        captureError(e);
         error.value = e.response?.data?.message ?? "Could not resume — please try again.";
     } finally {
         busy.value = false;
@@ -133,7 +138,8 @@ const discardAndReset = async () => {
             await window.axios.delete(
                 route("worlds.ingest.destroy", [props.world.id, ingestion.value.id]),
             );
-        } catch {
+        } catch (error) {
+            captureError(error);
             /* best effort — resetting the form either way */
         }
     }

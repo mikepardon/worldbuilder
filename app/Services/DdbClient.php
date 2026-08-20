@@ -8,7 +8,9 @@ use App\Support\Ddb;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use RuntimeException;
 
 /**
  * A minimal in-app "ddb-proxy": talks to D&D Beyond's services directly (server-side, so no CORS)
@@ -54,6 +56,16 @@ class DdbClient
     }
 
     /**
+     * Surface an unexpected non-ok response from DDB to Sentry. These endpoints degrade to empty/partial
+     * results on failure so an import can continue, but a silent truncation (a page that 5xx'd, a token that
+     * expired mid-run) would otherwise leave only a short result set with no trace of what went wrong.
+     */
+    protected function reportFailedResponse(Response $response, string $context): void
+    {
+        report(new RuntimeException("D&D Beyond {$context} request failed ({$response->status()})."));
+    }
+
+    /**
      * A single D&D Beyond character's public record (name, avatar, HP, AC, stats). This endpoint needs
      * no auth for characters set to public — the same one Beyond20 and ddb-proxy read. Returns the raw
      * `data` object, or null when the character is missing or private.
@@ -62,14 +74,25 @@ class DdbClient
      */
     public function character(string $id): ?array
     {
-        // A private/unshared character answers 4xx (which the retrying client raises) — treat as unreadable.
         try {
             $response = $this->http()->get(self::CHARACTER_URL.$id, ['includeCustomItems' => 'true']);
-        } catch (RequestException|ConnectionException) {
+        } catch (ConnectionException $exception) {
+            // A genuine DDB outage/timeout, not a private character — surface it, but let the caller treat
+            // this character as unreadable rather than aborting the whole batch import.
+            report($exception);
+
+            return null;
+        } catch (RequestException) {
+            // A 4xx here means the character is private/unshared — expected and unremarkable.
             return null;
         }
 
         if (! $response->ok()) {
+            // A 4xx is the private/unshared case (expected); a 5xx is a DDB-side failure worth surfacing.
+            if ($response->serverError()) {
+                $this->reportFailedResponse($response, 'character');
+            }
+
             return null;
         }
 
@@ -82,8 +105,17 @@ class DdbClient
     public function token(string $cobalt): ?string
     {
         $response = $this->http()->withHeaders(['Cookie' => "CobaltSession={$cobalt}"])->post(self::AUTH_URL);
+        if (! $response->ok()) {
+            // A 4xx means the pasted Cobalt session is invalid/expired — an expected user error, not
+            // something to alert on. A 5xx is a DDB auth-service outage worth surfacing.
+            if ($response->serverError()) {
+                $this->reportFailedResponse($response, 'token');
+            }
 
-        return $response->ok() ? ($response->json('token') ?: null) : null;
+            return null;
+        }
+
+        return $response->json('token') ?: null;
     }
 
     /**
@@ -94,7 +126,11 @@ class DdbClient
      */
     public function lookups(string $bearer): array
     {
-        $config = $this->http()->withToken($bearer)->get(self::CONFIG_URL)->json() ?? [];
+        $response = $this->http()->withToken($bearer)->get(self::CONFIG_URL);
+        if (! $response->ok()) {
+            $this->reportFailedResponse($response, 'lookups');
+        }
+        $config = $response->ok() ? ($response->json() ?? []) : [];
 
         $index = static function (array $rows, string $valueKey = 'name'): array {
             $out = [];
@@ -138,6 +174,7 @@ class DdbClient
                 'showHomebrew' => $homebrew ? 'true' : 'false',
             ]);
             if (! $response->ok()) {
+                $this->reportFailedResponse($response, 'monsters');
                 break;
             }
             $data = $response->json('data') ?? [];
@@ -162,6 +199,8 @@ class DdbClient
     {
         $response = $this->http()->withToken($bearer)->get(self::CAMPAIGNS_URL);
         if (! $response->ok()) {
+            $this->reportFailedResponse($response, 'campaigns');
+
             return [];
         }
 
@@ -189,6 +228,8 @@ class DdbClient
     {
         $response = $this->http()->withToken($bearer)->get(self::CAMPAIGNS_URL);
         if (! $response->ok()) {
+            $this->reportFailedResponse($response, 'campaignCharacters');
+
             return [];
         }
 
@@ -228,6 +269,8 @@ class DdbClient
 
         $response = $this->http()->withToken($bearer)->get(self::ITEMS_URL, $query);
         if (! $response->ok()) {
+            $this->reportFailedResponse($response, 'items');
+
             return [];
         }
 
@@ -253,6 +296,7 @@ class DdbClient
 
             $response = $this->http()->withToken($bearer)->get(self::SPELLS_URL, $query);
             if (! $response->ok()) {
+                $this->reportFailedResponse($response, 'spells');
                 continue;
             }
 

@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 /** Thin client over the Open5e SRD API (https://api.open5e.com). */
 class Open5eClient
@@ -43,12 +45,24 @@ class Open5eClient
         return self::ENDPOINTS;
     }
 
+    /**
+     * Surface an unexpected non-ok response from Open5e to Sentry. A fetch degrades to empty results on
+     * failure so an import can complete, but that silently truncates the import — surface it so a broken
+     * endpoint or exhausted retries leave a trace rather than a quietly partial library.
+     */
+    protected function reportFailedResponse(Response $response, string $context): void
+    {
+        report(new RuntimeException("Open5e {$context} request failed ({$response->status()})."));
+    }
+
     /** Fetch one page of a paginated Open5e listing by absolute URL. */
     public function page(string $url): array
     {
         $response = $this->http()->get($url);
 
         if (! $response->ok()) {
+            $this->reportFailedResponse($response, 'page');
+
             return ['results' => [], 'next' => null, 'count' => 0];
         }
 
@@ -71,8 +85,13 @@ class Open5eClient
             'search' => $query,
             'limit' => $limit,
         ]);
+        if (! $response->ok()) {
+            $this->reportFailedResponse($response, 'search');
 
-        return $response->ok() ? ($response->json('results') ?? []) : [];
+            return [];
+        }
+
+        return $response->json('results') ?? [];
     }
 
     /**

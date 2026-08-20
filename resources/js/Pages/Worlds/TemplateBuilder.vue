@@ -2,6 +2,7 @@
 import WorldLayout from "@/Layouts/WorldLayout.vue";
 import TemplateBlockPreview from "@/Components/TemplateBlockPreview.vue";
 import { scopeBlockCss } from "@/lib/readerCss";
+import { captureError } from "@/monitoring";
 import { Head, Link, router, useForm } from "@inertiajs/vue3";
 import { computed, nextTick, reactive, ref } from "vue";
 
@@ -535,7 +536,10 @@ const loadPreview = () => {
             }),
         )
         .then((res) => Object.assign(preview, samplePreview(), res.data))
-        .catch(() => resetPreview());
+        .catch((error) => {
+            captureError(error);
+            resetPreview();
+        });
 };
 
 </script>

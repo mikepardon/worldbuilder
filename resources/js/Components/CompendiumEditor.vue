@@ -14,6 +14,7 @@ import {
     SIZES,
     SKILLS,
 } from "@/lib/dnd";
+import { captureError } from "@/monitoring";
 import { Link, router, usePage } from "@inertiajs/vue3";
 import { marked } from "marked";
 import { computed, nextTick, reactive, ref, watch } from "vue";
@@ -374,22 +375,44 @@ const send = async (text) => {
             route(props.draftRoute, props.item.id),
             { prompt, document: form.document, history },
         );
-        const undo = applyPatch(res.data);
+        // The queued path returns a handle to poll; the sync path (admin) returns the result directly.
+        const result =
+            res.data && res.data.status !== undefined
+                ? res.data.status === "done"
+                    ? res.data.result
+                    : await pollAiRequest(res.data.id)
+                : res.data;
+
+        const undo = applyPatch(result);
         messages.value.push({
             role: "assistant",
-            content: res.data.reply || (undo ? "Updated the entry." : ""),
+            content: result.reply || (undo ? "Updated the entry." : ""),
             applied: !!undo,
             undo,
         });
-        if (res.data.ai?.creditsRemaining !== undefined)
-            credits.value = res.data.ai.creditsRemaining;
+        if (result.ai?.creditsRemaining !== undefined)
+            credits.value = result.ai.creditsRemaining;
     } catch (e) {
-        chatError.value = e.response?.data?.message ?? "The AI request failed.";
+        captureError(e);
+        chatError.value =
+            e.response?.data?.message ?? e.message ?? "The AI request failed.";
     } finally {
         asking.value = false;
         await nextTick(() => chatBottom.value?.scrollIntoView());
     }
 };
+
+// Poll a queued AI generation until the worker finishes it (or it fails / times out).
+async function pollAiRequest(uuid) {
+    for (let i = 0; i < 160; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const { data } = await window.axios.get(route("ai.requests.show", uuid));
+        if (data.status === "done") return data.result;
+        if (data.status === "failed")
+            throw new Error(data.error || "The AI request failed.");
+    }
+    throw new Error("The AI request took too long. Please try again.");
+}
 const boxText = (t) => marked.parse(t ?? "", { breaks: true });
 
 /* ---- entry image ---- */

@@ -40,6 +40,14 @@ return [
         'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
     ],
 
+    // Browser (Vue) error monitoring. The DSN is public by design and is exposed to the front-end via a
+    // shared Inertia prop. Leave it blank to disable front-end reporting, mirroring the back-end
+    // SENTRY_LARAVEL_DSN behaviour. Environment and release are reused from the back-end Sentry config.
+    'sentry_browser' => [
+        'dsn' => env('SENTRY_BROWSER_DSN'),
+        'traces_sample_rate' => (float) env('SENTRY_BROWSER_TRACES_SAMPLE_RATE', 0),
+    ],
+
     'deepgram' => [
         'key' => env('DEEPGRAM_API_KEY'),
         'model' => env('DEEPGRAM_MODEL', 'nova-2'),

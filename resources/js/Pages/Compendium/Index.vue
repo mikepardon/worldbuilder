@@ -1,5 +1,6 @@
 <script setup>
 import WorldLayout from '@/Layouts/WorldLayout.vue';
+import { captureError } from '@/monitoring';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, reactive, ref } from 'vue';
 
@@ -63,6 +64,7 @@ const runSearch = async () => {
         results.value = (await res.json()).results ?? [];
         selected.value = results.value.filter((r) => !r.exists).map((r) => r.id);
     } catch (e) {
+        captureError(e);
         searchError.value = 'The library lookup failed. Try again in a moment.';
         results.value = [];
     } finally {

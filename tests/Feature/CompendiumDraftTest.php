@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\DraftCompendiumEntry;
 use App\Models\User;
 use App\Services\AnthropicClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Mockery;
 use Tests\TestCase;
 
@@ -43,15 +45,17 @@ class CompendiumDraftTest extends TestCase
             'reply' => 'Beefed it up to CR 5.',
         ]));
 
+        // The draft runs on the queue (sync in tests, so it's already done) and the result is nested under `result`.
         $this->actingAs($gm)->postJson(route('compendium.draft', $monster), ['prompt' => 'make it CR 5'])
-            ->assertOk()
-            ->assertJsonPath('block.ac', '16')
-            ->assertJsonPath('block.cr', '5')
-            ->assertJsonPath('block.abilities.str', 18)
-            ->assertJsonPath('block.abilities.dex', 14) // untouched ability preserved
-            ->assertJsonPath('block.type', 'beast')     // untouched field preserved
-            ->assertJsonPath('summary', 'A hulking wharf brute.')
-            ->assertJsonPath('document', '');           // monsters carry no free document from the draft
+            ->assertStatus(202)
+            ->assertJsonPath('status', 'done')
+            ->assertJsonPath('result.block.ac', '16')
+            ->assertJsonPath('result.block.cr', '5')
+            ->assertJsonPath('result.block.abilities.str', 18)
+            ->assertJsonPath('result.block.abilities.dex', 14) // untouched ability preserved
+            ->assertJsonPath('result.block.type', 'beast')     // untouched field preserved
+            ->assertJsonPath('result.summary', 'A hulking wharf brute.')
+            ->assertJsonPath('result.document', '');           // monsters carry no free document from the draft
     }
 
     public function test_draft_fills_structured_fields_for_a_non_monster_entry(): void
@@ -70,13 +74,14 @@ class CompendiumDraftTest extends TestCase
         ]));
 
         $this->actingAs($gm)->postJson(route('compendium.draft', $spell), ['prompt' => 'draft this spell'])
-            ->assertOk()
-            ->assertJsonPath('fields.level', '3rd')
-            ->assertJsonPath('fields.school', 'Evocation')
-            ->assertJsonPath('fields.description', 'A bright streak flashes.')
-            ->assertJsonMissingPath('fields.bogus')
-            ->assertJsonPath('summary', 'A roaring ball of flame.')
-            ->assertJsonPath('block', null);
+            ->assertStatus(202)
+            ->assertJsonPath('status', 'done')
+            ->assertJsonPath('result.fields.level', '3rd')
+            ->assertJsonPath('result.fields.school', 'Evocation')
+            ->assertJsonPath('result.fields.description', 'A bright streak flashes.')
+            ->assertJsonMissingPath('result.fields.bogus')
+            ->assertJsonPath('result.summary', 'A roaring ball of flame.')
+            ->assertJsonPath('result.block', null);
     }
 
     public function test_draft_can_ask_a_clarifying_question_without_changing_anything(): void
@@ -90,10 +95,11 @@ class CompendiumDraftTest extends TestCase
         $this->fakeAi(json_encode(['document' => '', 'summary' => '', 'reply' => 'What level should this spell be?']));
 
         $this->actingAs($gm)->postJson(route('compendium.draft', $spell), ['prompt' => 'adjust it'])
-            ->assertOk()
-            ->assertJsonPath('reply', 'What level should this spell be?')
-            ->assertJsonPath('document', '')
-            ->assertJsonPath('block', null);
+            ->assertStatus(202)
+            ->assertJsonPath('status', 'done')
+            ->assertJsonPath('result.reply', 'What level should this spell be?')
+            ->assertJsonPath('result.document', '')
+            ->assertJsonPath('result.block', null);
     }
 
     public function test_a_successful_draft_is_billed_against_the_users_credits(): void
@@ -108,10 +114,37 @@ class CompendiumDraftTest extends TestCase
         $this->fakeAi(json_encode(['document' => '## Fireball', 'summary' => '', 'reply' => 'done']));
 
         $this->actingAs($gm)->postJson(route('compendium.draft', $spell), ['prompt' => 'draft it'])
-            ->assertOk()
-            ->assertJsonPath('ai.creditsRemaining', 14);
+            ->assertStatus(202)
+            ->assertJsonPath('status', 'done')
+            ->assertJsonPath('result.ai.creditsRemaining', 14);
 
         $this->assertSame(14, $gm->fresh()->aiCreditsRemaining());
+    }
+
+    public function test_a_draft_is_queued_and_polled_via_the_ai_request_endpoint(): void
+    {
+        Queue::fake();
+        $gm = User::factory()->create(['ai_credit_balance' => 10]);
+        $campaign = $this->world($gm);
+        $spell = $campaign->compendiumItems()->create([
+            'item_type' => 'spell', 'slug' => 'fb', 'name' => 'Fireball', 'provider' => 'custom',
+        ]);
+
+        // The controller only checks the AI reports it's configured; the job that would call it is faked off.
+        $ai = Mockery::mock(AnthropicClient::class);
+        $ai->shouldReceive('configured')->andReturnTrue();
+        $this->app->instance(AnthropicClient::class, $ai);
+
+        $start = $this->actingAs($gm)->postJson(route('compendium.draft', $spell), ['prompt' => 'draft it'])
+            ->assertStatus(202)
+            ->assertJsonPath('status', 'pending');
+
+        Queue::assertPushed(DraftCompendiumEntry::class);
+
+        // The browser polls this handle until the worker finishes; here it's still pending (job not run).
+        $this->actingAs($gm)->getJson(route('ai.requests.show', $start->json('id')))
+            ->assertOk()
+            ->assertJsonPath('status', 'pending');
     }
 
     public function test_draft_is_blocked_when_the_user_is_out_of_credits(): void

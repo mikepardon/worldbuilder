@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\CompendiumController as AdminCompendium;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboard;
 use App\Http\Controllers\Admin\UsersController as AdminUsers;
 use App\Http\Controllers\AiController;
+use App\Http\Controllers\AiRequestController;
 use App\Http\Controllers\ArticleNoteController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\CalendarController;
@@ -273,6 +274,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/compendium/{item}', [CompendiumController::class, 'update'])->name('compendium.update');
     Route::post('/compendium/{item}/clone', [CompendiumController::class, 'clone'])->name('compendium.clone');
     Route::post('/compendium/{item}/draft', [CompendiumController::class, 'draft'])->name('compendium.draft');
+    // Poll an async AI generation (compendium Muse and other queued chat features) until the worker finishes.
+    Route::get('/ai/requests/{aiRequest}', [AiRequestController::class, 'show'])->name('ai.requests.show');
     Route::post('/compendium/{item}/rebuild', [CompendiumController::class, 'rebuild'])->name('compendium.rebuild');
     Route::post('/compendium/{item}/image', [CompendiumController::class, 'uploadImage'])->name('compendium.image');
     Route::delete('/compendium/{item}/image', [CompendiumController::class, 'removeImage'])->name('compendium.image.destroy');
@@ -299,14 +302,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/campaigns/{campaign}/sessions', [SessionController::class, 'store'])->name('sessions.store');
     Route::put('/sessions/{session}/details', [SessionController::class, 'details'])->name('sessions.details');
     Route::get('/sessions/{session}/view', [SessionController::class, 'view'])->name('sessions.view');
-    Route::get('/sessions/{session}/edit', [SessionController::class, 'edit'])->name('sessions.edit');
+    // The GM session editor lives under its world/campaign so it carries the world nav and a consistent URL.
+    Route::get('/worlds/{world}/campaigns/{campaign}/sessions/{session}/edit', [SessionController::class, 'edit'])->scopeBindings()->name('sessions.edit');
+    // Legacy flat URL redirects to the nested canonical one (keeps old links/bookmarks working).
+    Route::get('/sessions/{session}/edit', fn (\App\Models\Session $session) => redirect()->route('sessions.edit', [$session->campaign->world_id, $session->campaign_id, $session->id]));
     Route::put('/sessions/{session}', [SessionController::class, 'update'])->name('sessions.update');
     Route::post('/sessions/{session}/ai', [SessionController::class, 'ask'])->name('sessions.ai');
     Route::delete('/sessions/{session}', [SessionController::class, 'destroy'])->name('sessions.destroy');
 
     // Session recap: the post-play analysis. Audio uploads direct-to-S3 via the multipart signing
     // endpoints, then `store` records it and queues the analysis; the recap page polls `status`.
-    Route::get('/sessions/{session}/recap', [RecapController::class, 'show'])->name('sessions.recap.show');
+    Route::get('/worlds/{world}/campaigns/{campaign}/sessions/{session}/recap', [RecapController::class, 'show'])->scopeBindings()->name('sessions.recap.show');
+    Route::get('/sessions/{session}/recap', fn (\App\Models\Session $session) => redirect()->route('sessions.recap.show', [$session->campaign->world_id, $session->campaign_id, $session->id]));
     Route::post('/sessions/{session}/recap', [RecapController::class, 'store'])->name('sessions.recap.store');
     Route::post('/sessions/{session}/recap/text', [RecapController::class, 'storeText'])->name('sessions.recap.text');
     Route::post('/sessions/{session}/recap/retry', [RecapController::class, 'retry'])->name('sessions.recap.retry');

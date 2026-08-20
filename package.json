@@ -25,6 +25,7 @@
         "@fontsource/cinzel-decorative": "^5.3.0",
         "@fontsource/eb-garamond": "^5.3.0",
         "@fortawesome/fontawesome-free": "^7.3.1",
+        "@sentry/vue": "^10.70.0",
         "@uppy/aws-s3": "^5.1.0",
         "@uppy/core": "^5.2.0",
         "@uppy/dashboard": "^5.1.1",

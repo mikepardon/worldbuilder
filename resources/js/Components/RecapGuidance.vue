@@ -1,4 +1,5 @@
 <script setup>
+import { captureError } from "@/monitoring";
 import { ref } from "vue";
 
 const props = defineProps({
@@ -32,6 +33,7 @@ async function save() {
         emit("updated", res.data);
         editing.value = false;
     } catch (e) {
+        captureError(e);
         error.value =
             e?.response?.data?.message ||
             "Couldn’t save the guidance — please try again.";

@@ -7,13 +7,16 @@ namespace App\Http\Controllers;
 use App\Jobs\AnalyseRecap;
 use App\Jobs\NotifyDiscordRecap;
 use App\Jobs\TranscribeRecap;
+use App\Models\Campaign;
 use App\Models\Recap;
 use App\Models\RecapEntity;
 use App\Models\Session;
+use App\Models\World;
 use App\Services\AnthropicClient;
 use App\Support\CreditWeights;
 use App\Support\RecapEntityPresenter;
 use App\Support\Webhooks;
+use App\Support\WorldNav;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -31,14 +34,14 @@ use Inertia\Response;
 class RecapController extends Controller
 {
     /** The recap page: the analysis when ready, or the uploader when there isn't one yet. */
-    public function show(Session $session): Response
+    public function show(World $world, Campaign $campaign, Session $session): Response
     {
-        $this->authorize('manage', $session->campaign);
+        $this->authorize('manage', $campaign);
 
-        $campaign = $session->campaign;
         $recap = $session->recap;
 
         return Inertia::render('Recaps/Show', [
+            'world' => WorldNav::for($world),
             'session' => ['id' => $session->id, 'title' => $session->title],
             'campaign' => [
                 'id' => $campaign->id,

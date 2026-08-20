@@ -53,7 +53,7 @@ class SessionTest extends TestCase
         $this->actingAs($intruder)->post(route('sessions.store', $campaign), ['title' => 'X'])->assertForbidden();
         $this->actingAs($intruder)->put(route('sessions.update', $session), ['title' => 'X'])->assertForbidden();
         $this->actingAs($intruder)->delete(route('sessions.destroy', $session))->assertForbidden();
-        $this->actingAs($intruder)->get(route('sessions.edit', $session))->assertForbidden();
+        $this->actingAs($intruder)->get(route('sessions.edit', [$session->campaign->world_id, $session->campaign_id, $session->id]))->assertForbidden();
         $this->assertSame('Secret prep', $session->fresh()->title);
     }
 
@@ -64,12 +64,22 @@ class SessionTest extends TestCase
         $campaign = $world->campaigns()->firstOrFail();
         $session = $campaign->sessions()->create(['title' => 'The Sunken Cathedral', 'body' => "# Recap\n\nThe party descended."]);
 
-        $this->actingAs($gm)->get(route('sessions.edit', $session))->assertInertia(fn (Assert $page) => $page
+        $this->actingAs($gm)->get(route('sessions.edit', [$session->campaign->world_id, $session->campaign_id, $session->id]))->assertInertia(fn (Assert $page) => $page
             ->component('Sessions/Edit')
             ->where('document.kind', 'session')
             ->where('document.title', 'The Sunken Cathedral')
             ->where('document.content', "# Recap\n\nThe party descended.")
             ->where('campaign.name', $campaign->name));
+    }
+
+    public function test_the_legacy_flat_session_edit_url_redirects_to_the_nested_one(): void
+    {
+        $gm = User::factory()->create();
+        $world = $gm->worlds()->create(['name' => 'Saltmere', 'visibility' => 'private']);
+        $session = $world->campaigns()->firstOrFail()->sessions()->create(['title' => 'S']);
+
+        $this->actingAs($gm)->get("/sessions/{$session->id}/edit")
+            ->assertRedirect(route('sessions.edit', [$session->campaign->world_id, $session->campaign_id, $session->id]));
     }
 
     public function test_the_editor_saves_the_markdown_body_sent_as_content(): void
