@@ -104,4 +104,17 @@ class AnalyseRecap implements ShouldQueue
             throw $e;
         }
     }
+
+    /**
+     * A job killed by its timeout or reaped for exceeding attempts never reaches the catch in handle(), so
+     * without this hook the recap would sit on "analyzing" forever with no error surfaced to the GM. Guard on
+     * isFinished() so a late reaper can never clobber a run that already completed (or already failed).
+     */
+    public function failed(Throwable $exception): void
+    {
+        $recap = $this->recap->fresh();
+        if ($recap !== null && ! $recap->isFinished()) {
+            $recap->markFailed('Analysis failed unexpectedly. Please try again.');
+        }
+    }
 }

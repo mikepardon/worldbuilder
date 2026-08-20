@@ -41,7 +41,10 @@ Without a worker these sit "queued" forever. Run a supervised worker:
 php artisan queue:work --tries=1 --timeout=1800
 ```
 
-(Use Supervisor/systemd to keep it alive. `--timeout` must exceed the longest job — transcription is 1800s.)
+(Use Supervisor/systemd to keep it alive. `--timeout` must be at least the longest job — transcription is
+1800s. Critically, the queue's `retry_after` **must be greater than `--timeout`** (it defaults to 1860s; see
+`config/queue.php` / `DB_QUEUE_RETRY_AFTER`) — if it's lower, a still-running job is re-reserved and fails
+with `MaxAttemptsExceededException`.)
 
 ## composer install fails with GitHub 504
 

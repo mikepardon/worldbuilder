@@ -169,7 +169,7 @@ async function save() {
                     <input
                         v-model="draftInstructions[i]"
                         type="text"
-                        placeholder="e.g. Never mention dice rolls in the recap"
+                        placeholder="e.g. Write in the present tense"
                         class="w-full rounded border border-edge2 bg-night/60 p-2 text-sm text-ink"
                     />
                     <button
@@ -180,7 +180,9 @@ async function save() {
                     </button>
                 </div>
                 <p v-if="!draftInstructions.length" class="text-xs text-faint">
-                    No instructions yet — add one above.
+                    No extra instructions — recaps are already written in-world,
+                    third-person, with no dice rolls or table talk. Add
+                    directions above to fine-tune.
                 </p>
             </div>
         </div>

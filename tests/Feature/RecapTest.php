@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Jobs\AnalyseRecap;
 use App\Models\Session;
 use App\Models\User;
 use App\Services\Transcription\Transcriber;
+use RuntimeException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -447,6 +449,63 @@ class RecapTest extends TestCase
 
         Http::assertSent(fn ($request) => str_contains(json_encode($request->data()), 'Clayton')
             && str_contains(json_encode($request->data()), 'Never mention dice rolls'));
+    }
+
+    public function test_the_recap_prompt_instructs_an_in_world_third_person_perspective_with_no_dice_rolls(): void
+    {
+        Storage::fake('s3');
+        $this->fakeAnalysis();
+
+        $gm = User::factory()->create(['ai_credit_balance' => 1000]);
+        $session = $this->sessionFor($gm);
+        $session->recap()->create([
+            'user_id' => $gm->id, 'disk' => 's3', 'path' => 'recaps/1/a.wav',
+            'duration_seconds' => 3600, 'detail_level' => 'comprehensive', 'status' => 'done',
+            'transcript' => 'Brian rolled a natural 20 to hit the goblin.',
+        ]);
+
+        $this->actingAs($gm)->postJson(route('sessions.recap.reanalyse', $session))->assertStatus(202);
+
+        // The core narrative rules ship in the system prompt itself, even with no GM instructions set.
+        Http::assertSent(function ($request): bool {
+            $system = (string) ($request->data()['system'] ?? '');
+
+            return str_contains($system, 'in-world')
+                && str_contains($system, 'third-person')
+                && str_contains($system, 'dice rolls');
+        });
+    }
+
+    public function test_a_reaped_analysis_job_marks_the_recap_failed_so_it_does_not_hang(): void
+    {
+        $gm = User::factory()->create();
+        $session = $this->sessionFor($gm);
+        $recap = $session->recap()->create([
+            'user_id' => $gm->id, 'disk' => 's3', 'path' => 'recaps/1/a.wav',
+            'detail_level' => 'comprehensive', 'status' => 'analyzing',
+            'transcript' => 'The party rang the bell.',
+        ]);
+
+        // A job killed by its timeout / reaped for exceeding attempts never reaches handle()'s catch.
+        (new AnalyseRecap($recap))->failed(new RuntimeException('reaped'));
+
+        $this->assertSame('failed', $recap->fresh()->status);
+    }
+
+    public function test_the_failed_hook_never_clobbers_an_already_completed_recap(): void
+    {
+        $gm = User::factory()->create();
+        $session = $this->sessionFor($gm);
+        $recap = $session->recap()->create([
+            'user_id' => $gm->id, 'disk' => 's3', 'path' => 'recaps/1/a.wav',
+            'detail_level' => 'comprehensive', 'status' => 'done',
+            'recap_full' => 'The party rang the bell.',
+        ]);
+
+        // A late reaper firing after the first attempt already finished must not undo a good result.
+        (new AnalyseRecap($recap))->failed(new RuntimeException('late reaper'));
+
+        $this->assertSame('done', $recap->fresh()->status);
     }
 
     public function test_a_non_gm_cannot_edit_campaign_recap_guidance(): void

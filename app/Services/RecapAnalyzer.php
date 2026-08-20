@@ -35,7 +35,8 @@ class RecapAnalyzer
      */
     /**
      * @param  list<string>  $facts  GM-provided facts and corrections to apply as authoritative.
-     * @param  list<string>  $instructions  GM output directives (e.g. never mention dice rolls).
+     * @param  list<string>  $instructions  Extra GM output directives layered on top of the core narrative
+     *                                       rules (e.g. "write in the present tense", "keep it spoiler-free").
      */
     public function analyze(World $world, Session $session, string $transcript, string $detail, ?int $userId, array $facts = [], array $instructions = []): array
     {
@@ -50,6 +51,18 @@ class RecapAnalyzer
 
         $context = WorldContext::forPrompt($world);
 
+        // Core narrative rules: a recap is an in-world chronicle of the campaign's story, not a play-by-play
+        // of the table. It follows the characters and what happens to them in the fiction, and omits the
+        // game's machinery — everything the characters themselves would never know.
+        $perspective = ' Write the recap as an in-world, third-person narrative of the campaign\'s story,'
+            .' following the characters and what happens to them in the fiction. Do not include any'
+            .' out-of-character or "meta" table content: no dice rolls, target numbers, DCs, skill or ability'
+            .' checks, initiative, hit points, armour class, spell slots, rules or mechanics discussion, and no'
+            .' real player names or table chatter. Translate mechanical outcomes into story terms — a hit'
+            .' becomes a blow that lands, a failed save becomes the spell taking hold — so it reads as events in'
+            .' the world, not moves in a game. This applies to every text field you produce (the recaps,'
+            .' moments, outline and next steps).';
+
         $factsBlock = $facts === [] ? '' : ' The GM has provided authoritative facts and corrections for'
             .' this session — apply them throughout (for example, a real name said out of character should be'
             .' replaced by the intended character, and a stated fact overrides anything ambiguous in the'
@@ -61,6 +74,7 @@ class RecapAnalyzer
         $system = "You are Muse, a worldbuilding assistant for the tabletop RPG world \"{$world->name}\"."
             .($world->setting ? " The setting: {$world->setting}." : '')
             .' Read a raw play-session transcript and turn it into a GM session recap analysis.'
+            .$perspective
             .' Prefer names, places and factions that already exist in the world (listed below) over inventing new spellings.'
             .$factsBlock
             .$instructionsBlock

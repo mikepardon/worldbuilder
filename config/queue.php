@@ -40,9 +40,11 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            // Must exceed the longest single job run (jobs set their own $timeout below this) so a job
-            // that's still working isn't re-reserved and failed as "attempted too many times".
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 300),
+            // MUST exceed both the longest single job run and the worker's `--timeout` (DEPLOY.md runs the
+            // worker at 1800s, matching the 1800s TranscribeRecap/RunDdbImport jobs). Otherwise a job that's
+            // still legitimately working is re-reserved by the queue and failed as "attempted too many times"
+            // (Laravel's rule: retry_after > --timeout). 1860 = 1800 + a 60s margin over the worker timeout.
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 1860),
             'after_commit' => false,
         ],
 
