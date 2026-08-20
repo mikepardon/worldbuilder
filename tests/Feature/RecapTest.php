@@ -7,6 +7,8 @@ namespace Tests\Feature;
 use App\Jobs\AnalyseRecap;
 use App\Models\Session;
 use App\Models\User;
+use App\Services\RecapAnalyzer;
+use App\Services\RecapEntityMatcher;
 use App\Services\Transcription\Transcriber;
 use RuntimeException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -474,6 +476,66 @@ class RecapTest extends TestCase
                 && str_contains($system, 'third-person')
                 && str_contains($system, 'dice rolls');
         });
+    }
+
+    public function test_an_analysis_cut_off_by_the_output_cap_still_saves_what_arrived(): void
+    {
+        config(['services.anthropic.key' => 'test-key']);
+        // The model ran into max_tokens part-way through the entity list, so the JSON just stops.
+        Http::fake(['api.anthropic.com/*' => Http::response([
+            'model' => 'claude-sonnet-4-6',
+            'content' => [['type' => 'text', 'text' => '{"recap_full": "The party rang the bell.",'
+                .' "recap_short": "They rang it.", "recap_stylized": "Previously…",'
+                .' "moments": [{"type": "epic", "description": "The bell tolled.", "context": "At low tide."}],'
+                .' "outline": [{"title": "The Bell", "detail": "They rang it."}], "next_steps": [],'
+                .' "entities": [{"name": "Maren", "type": "npc", "description": "The tide-priestess."}, {"name": "The Ashen Con']],
+            'usage' => ['input_tokens' => 200, 'output_tokens' => 24000],
+        ], 200)]);
+
+        $gm = User::factory()->create(['ai_credit_balance' => 1000]);
+        $session = $this->sessionFor($gm);
+        $recap = $session->recap()->create([
+            'user_id' => $gm->id, 'disk' => 's3', 'path' => 'recaps/1/a.wav',
+            'detail_level' => 'comprehensive', 'status' => 'analyzing',
+            'transcript' => self::TRANSCRIPT,
+        ]);
+
+        (new AnalyseRecap($recap, charge: false))->handle(app(RecapAnalyzer::class), app(RecapEntityMatcher::class));
+
+        $recap->refresh();
+        $this->assertSame('done', $recap->status);
+        $this->assertSame('The party rang the bell.', $recap->recap_full);
+        $this->assertCount(1, $recap->moments);
+        // Only the entity that arrived whole is kept; the one cut mid-name is dropped.
+        $this->assertCount(1, $recap->entities);
+        $this->assertSame('Maren', $recap->entities[0]->name);
+    }
+
+    public function test_an_analysis_with_no_recap_text_at_all_fails_rather_than_saving_an_empty_recap(): void
+    {
+        config(['services.anthropic.key' => 'test-key']);
+        // Cut off before a single field finished — there is nothing worth keeping.
+        Http::fake(['api.anthropic.com/*' => Http::response([
+            'model' => 'claude-sonnet-4-6',
+            'content' => [['type' => 'text', 'text' => '{"recap_full": "The party rang the']],
+            'usage' => ['input_tokens' => 200, 'output_tokens' => 24000],
+        ], 200)]);
+
+        $gm = User::factory()->create(['ai_credit_balance' => 1000]);
+        $session = $this->sessionFor($gm);
+        $recap = $session->recap()->create([
+            'user_id' => $gm->id, 'disk' => 's3', 'path' => 'recaps/1/a.wav',
+            'detail_level' => 'comprehensive', 'status' => 'analyzing',
+            'transcript' => self::TRANSCRIPT,
+        ]);
+
+        $this->expectException(RuntimeException::class);
+
+        try {
+            (new AnalyseRecap($recap, charge: false))->handle(app(RecapAnalyzer::class), app(RecapEntityMatcher::class));
+        } finally {
+            $this->assertSame('failed', $recap->fresh()->status);
+        }
     }
 
     public function test_a_reaped_analysis_job_marks_the_recap_failed_so_it_does_not_hang(): void
