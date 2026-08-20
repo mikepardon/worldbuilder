@@ -125,7 +125,12 @@ const removeSession = (session) => {
                                 <Link
                                     :href="route('sessions.edit', [world.id, campaign.id, s.id])"
                                     class="text-xs text-muted hover:text-amber"
-                                    >Open ↗</Link
+                                    >Edit session ↗</Link
+                                >
+                                <Link
+                                    :href="route('sessions.recap.show', [world.id, campaign.id, s.id])"
+                                    class="text-xs text-muted hover:text-amber"
+                                    >Recap ↗</Link
                                 >
                                 <button
                                     class="text-faint hover:text-red-400"

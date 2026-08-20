@@ -65,7 +65,9 @@ class RecapEntityTest extends TestCase
 
         $this->actingAs($gm)->postJson(route('recap.entities.link', $entity), [
             'target' => 'document', 'id' => $document->id,
-        ])->assertOk()->assertJsonPath('status', 'linked')->assertJsonPath('link.url', route('documents.edit', $document->id));
+        ])->assertOk()->assertJsonPath('status', 'linked')
+            ->assertJsonPath('link.edit_url', route('documents.edit', $document->id))
+            ->assertJsonPath('link.view_url', route('public.article', [$world->slug, 'location', 'gloomgrove']));
 
         $entity->refresh();
         $this->assertSame('linked', $entity->status);

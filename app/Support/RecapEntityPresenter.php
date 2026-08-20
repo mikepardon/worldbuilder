@@ -8,14 +8,15 @@ use App\Models\RecapEntity;
 
 /**
  * Shapes a {@see RecapEntity} for the frontend: its editable fields, reconciliation status, and a link to
- * the real world entry it's tied to (with a URL to open it) when one exists.
+ * the real world entry it's tied to (with URLs to open the in-app editor and the public reader view) when
+ * one exists.
  */
 final class RecapEntityPresenter
 {
     /**
      * @return array{
      *     id: int, name: string, type: string, description: string|null, status: string,
-     *     link: array{target: string, id: int, name: string, url: string}|null,
+     *     link: array{target: string, id: int, name: string, edit_url: string, view_url: string}|null,
      * }
      */
     public static function present(RecapEntity $entity): array
@@ -31,7 +32,7 @@ final class RecapEntityPresenter
     }
 
     /**
-     * @return array{target: string, id: int, name: string, url: string}|null
+     * @return array{target: string, id: int, name: string, edit_url: string, view_url: string}|null
      */
     private static function link(RecapEntity $entity): ?array
     {
@@ -42,7 +43,12 @@ final class RecapEntityPresenter
                 'target' => 'document',
                 'id' => $document->id,
                 'name' => $document->title,
-                'url' => route('documents.edit', $document->id),
+                'edit_url' => route('documents.edit', $document->id),
+                'view_url' => route('public.article', [
+                    $document->world->slug,
+                    Sections::typeSlug($document->kind),
+                    $document->slug,
+                ]),
             ];
         }
 
@@ -53,7 +59,8 @@ final class RecapEntityPresenter
                 'target' => 'compendium',
                 'id' => $item->id,
                 'name' => $item->name,
-                'url' => route('compendium.edit', $item->id),
+                'edit_url' => route('compendium.edit', $item->id),
+                'view_url' => route('public.compendium.item', [$item->world->slug, $item->slug]),
             ];
         }
 

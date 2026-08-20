@@ -44,8 +44,8 @@ class PublicRecapController extends Controller
                     'type' => $entity->type,
                     'description' => $entity->description,
                 ])->all(),
-                'transcript' => $recap->transcript,
-                'rating' => $recap->rating,
+                // The transcript (raw session audio, GM-only) and the GM's private quality rating are
+                // deliberately NOT exposed on the public share page — it is for players/anyone with the link.
             ],
         ]);
     }

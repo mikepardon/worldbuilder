@@ -56,6 +56,25 @@ class PublicRecapTest extends TestCase
                 ->has('recap.next_steps', 1));
     }
 
+    public function test_the_public_recap_page_does_not_expose_the_gm_only_transcript_or_rating(): void
+    {
+        $gm = User::factory()->create();
+        $recap = $this->doneRecap($gm);
+        $recap->update([
+            'share_token' => 'sharetoken123',
+            'transcript' => 'GM: The bell tolls. Player: I ring it again.',
+            'rating' => 5,
+        ]);
+
+        $this->get(route('public.recap', 'sharetoken123'))->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Public/Recap')
+                // The narrative is public; the raw transcript and the GM's private rating must not be.
+                ->where('recap.recap_short', 'They rang it.')
+                ->missing('recap.transcript')
+                ->missing('recap.rating'));
+    }
+
     public function test_an_unknown_token_is_not_found(): void
     {
         $this->get(route('public.recap', 'does-not-exist'))->assertNotFound();

@@ -165,12 +165,26 @@ function dismiss() {
                 {{ entity.description }}
             </p>
 
-            <a
+            <div
                 v-if="entity.link"
-                :href="entity.link.url"
-                class="mt-2 inline-block text-xs text-amber hover:underline"
-                >↳ {{ entity.link.name }}</a
+                class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
             >
+                <span class="text-amber">↳ {{ entity.link.name }}</span>
+                <a
+                    :href="entity.link.edit_url"
+                    target="_blank"
+                    rel="noopener"
+                    class="text-faint hover:text-ink"
+                    >Edit ↗</a
+                >
+                <a
+                    :href="entity.link.view_url"
+                    target="_blank"
+                    rel="noopener"
+                    class="text-faint hover:text-ink"
+                    >View ↗</a
+                >
+            </div>
 
             <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
                 <button class="text-faint hover:text-ink" @click="startEdit">

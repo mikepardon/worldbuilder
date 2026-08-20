@@ -423,7 +423,7 @@ class RecapController extends Controller
 
     private function payload(Recap $recap): array
     {
-        $recap->loadMissing(['entities.linkedDocument', 'entities.linkedCompendiumItem']);
+        $recap->loadMissing(['entities.linkedDocument.world', 'entities.linkedCompendiumItem.world']);
 
         return [
             'id' => $recap->id,
