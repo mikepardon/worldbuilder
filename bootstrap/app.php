@@ -31,8 +31,17 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: ['stripe/webhook', 'webhooks/deepgram/*']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // Render exceptions as JSON for API-style surfaces. The MCP server is a machine-to-machine endpoint
+        // (MCP clients send `Accept: application/json, text/event-stream`, which otherwise reads as a browser
+        // request), so an unauthenticated call must return 401 JSON, not a 302 redirect to the login page.
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*'),
+            fn (Request $request) => $request->is('api/*')
+                || $request->is('mcp')
+                || $request->is('mcp/*')
+                // Personal access token management is an axios/JSON surface, so validation and auth failures
+                // must return 422/401 JSON, not a redirect to a page.
+                || $request->is('profile/api-tokens')
+                || $request->is('profile/api-tokens/*'),
         );
 
         // Report unhandled exceptions to Sentry (no-op unless SENTRY_LARAVEL_DSN is configured).

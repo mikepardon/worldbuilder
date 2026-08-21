@@ -34,7 +34,7 @@ class AnthropicClientTest extends TestCase
         Http::fake(['api.anthropic.com/*' => Http::response(['error' => 'overloaded'], 529)]);
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('The AI service returned an error (529).');
+        $this->expectExceptionMessage('The AI service is temporarily unavailable — please try again.');
 
         app(AnthropicClient::class)->message('You are a bot.', 'Hello?');
     }

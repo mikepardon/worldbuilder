@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Ai\Agents\RecapAgent;
 use App\Jobs\AnalyseRecap;
 use App\Models\Recap;
 use App\Models\Session;
 use App\Models\World;
 use App\Support\AiJson;
+use App\Support\AiModels;
+use App\Support\AiUsage;
 use App\Support\AiUsageContext;
 use App\Support\WorldContext;
 use Illuminate\Support\Str;
@@ -22,7 +25,6 @@ use RuntimeException;
  */
 class RecapAnalyzer
 {
-    public function __construct(private AnthropicClient $ai) {}
 
     /**
      * @return array{
@@ -89,20 +91,28 @@ class RecapAnalyzer
             .'- "entities": an array of the notable people, places, factions, items, monsters and spells that appeared, each {"name": string, "type": one of '.implode('|', Recap::ENTITY_TYPES).', "description": string}.'
             ."\n\nExisting world so far:\n".($context !== '' ? $context : '(no entries yet)');
 
-        $reply = $this->ai->chat(
-            $system,
-            [['role' => 'user', 'content' => "Session title: {$session->title}\n\nTranscript:\n\n{$transcript}"]],
-            // A long session (full recap + many entities + moments + steps) is a large reply; too small a
-            // cap truncates the JSON mid-object and the parse fails. Give it generous headroom — a
-            // multi-hour session can run to ~20k tokens of structured output.
-            24000,
-            new AiUsageContext('session_recap', $world->id, $userId, 'analyze'),
-            // A whole-session transcript is a large prompt with a long reply; give it far more than the
-            // interactive default. Stays under AnalyseRecap's 600s job timeout so the client fails cleanly.
+        // The model is an admin setting, resolved per world (or the global default).
+        $model = AiModels::forWorld($world->id);
+
+        // The output budget (24k tokens) is pinned on the agent; 540s stays under AnalyseRecap's 600s job
+        // timeout so the client fails cleanly rather than the worker killing it.
+        $response = (new RecapAgent($system))->prompt(
+            "Session title: {$session->title}\n\nTranscript:\n\n{$transcript}",
+            provider: 'anthropic',
+            model: $model,
             timeout: 540,
         );
 
-        $data = AiJson::object($reply);
+        // Meter the call as an AiUsageEvent, as the previous AnthropicClient path did — priced against the
+        // model the response reports (falling back to the requested one).
+        AiUsage::record(
+            new AiUsageContext('session_recap', $world->id, $userId, 'analyze'),
+            $response->meta->model ?: $model,
+            $response->usage->promptTokens,
+            $response->usage->completionTokens,
+        );
+
+        $data = AiJson::object($response->text);
         if ($data === null) {
             throw new RuntimeException('The assistant did not return a usable recap analysis.');
         }

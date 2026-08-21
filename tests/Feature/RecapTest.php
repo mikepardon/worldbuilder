@@ -508,6 +508,25 @@ class RecapTest extends TestCase
         $this->assertSame('done', $recap->fresh()->status);
     }
 
+    public function test_the_recap_completion_requests_the_pinned_output_token_budget(): void
+    {
+        Storage::fake('s3');
+        $this->fakeAnalysis();
+
+        $gm = User::factory()->create(['ai_credit_balance' => 1000]);
+        $session = $this->sessionFor($gm);
+        $session->recap()->create([
+            'user_id' => $gm->id, 'disk' => 's3', 'path' => 'recaps/1/a.wav',
+            'duration_seconds' => 3600, 'detail_level' => 'comprehensive', 'status' => 'done',
+            'transcript' => 'The party rang the bell.',
+        ]);
+
+        $this->actingAs($gm)->postJson(route('sessions.recap.reanalyse', $session))->assertStatus(202);
+
+        // The RecapAgent's #[MaxTokens(24000)] must reach the provider, or long recaps truncate mid-JSON.
+        Http::assertSent(fn ($request): bool => ($request->data()['max_tokens'] ?? null) === 24000);
+    }
+
     public function test_a_non_gm_cannot_edit_campaign_recap_guidance(): void
     {
         $gm = User::factory()->create();

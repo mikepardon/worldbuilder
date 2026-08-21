@@ -26,6 +26,18 @@ class ProfileController extends Controller
             'status' => session('status'),
             // Whether a personal D&D Beyond cobalt key is stored (never expose the value).
             'ddbSaved' => filled($request->user()->ddb_cobalt),
+            // Personal access tokens for MCP clients (the token value itself is only ever shown once, at
+            // creation, and is never returned here — only its metadata).
+            'apiTokens' => $request->user()->tokens()
+                ->orderByDesc('created_at')
+                ->get(['id', 'name', 'last_used_at', 'created_at'])
+                ->map(fn ($token): array => [
+                    'id' => $token->id,
+                    'name' => $token->name,
+                    'last_used_at' => $token->last_used_at?->toDayDateTimeString(),
+                    'created_at' => $token->created_at?->toDayDateTimeString(),
+                ])->all(),
+            'mcpUrl' => url('/mcp'),
         ]);
     }
 

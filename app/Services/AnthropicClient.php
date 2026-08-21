@@ -1,20 +1,25 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
+use App\Ai\Agents\AssistantAgent;
 use App\Support\AiModels;
 use App\Support\AiUsage;
 use App\Support\AiUsageContext;
-use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Support\Facades\Http;
+use Laravel\Ai\Exceptions\AiException;
+use Laravel\Ai\Exceptions\ProviderConnectionException;
 use RuntimeException;
 use Throwable;
 
-/** Thin client over the Anthropic Messages API. */
+/**
+ * Thin assistant over the Anthropic Messages API, now backed by the laravel/ai SDK (via {@see AssistantAgent}).
+ * Keeps a single, stable entry point for the app's metered chat calls so token usage is logged in one place;
+ * callers pass a system prompt, an ordered message list and a budget, and get plain text back.
+ */
 class AnthropicClient
 {
-    protected const ENDPOINT = 'https://api.anthropic.com/v1/messages';
-
     /**
      * The longest a synchronous web request may wait on the model. Cloudflare returns a 504 once the origin
      * takes ~100s, so a web call must fail cleanly well before then rather than hang into a gateway timeout.
@@ -25,7 +30,7 @@ class AnthropicClient
 
     public function configured(): bool
     {
-        return ! empty(config('services.anthropic.key'));
+        return filled(config('services.anthropic.key'));
     }
 
     /** Single-turn helper. */
@@ -39,25 +44,23 @@ class AnthropicClient
      * usage context is given, the call is logged (with its token cost) as an AiUsageEvent.
      *
      * $timeout is the HTTP timeout in seconds. The default suits interactive web calls; long batch work on
-     * a queue (a big transcript, many tokens) should raise it — a non-streaming reply arrives all at once,
-     * so too short a timeout aborts with "0 bytes received" while the model is still generating. Keep it
-     * below the dispatching job's own timeout so the client fails cleanly rather than the worker killing it.
+     * a queue (a big transcript, many tokens) should raise it. Keep it below the dispatching job's own
+     * timeout so the client fails cleanly rather than the worker killing it.
+     *
+     * @param  list<array{role: string, content: string}>  $messages
      */
     public function chat(string $system, array $messages, int $maxTokens = 1500, ?AiUsageContext $usage = null, int $timeout = 60): string
     {
-        $key = config('services.anthropic.key');
-        if (blank($key)) {
+        if (! $this->configured()) {
             throw new RuntimeException("AI isn't set up on this server yet.");
         }
 
         // A generation (e.g. several stat blocks at once) can legitimately run for up to the HTTP timeout.
         // The web SAPI's default max_execution_time is 30s, so lift it past the timeout — otherwise PHP
         // kills the process mid-request as a fatal error before the client's own timeout can surface as a
-        // catchable exception. Only do this under a web SAPI: in a queue worker (CLI) max_execution_time is
-        // already unlimited, and setting it here would cap the long-lived worker process and crash it.
-        //
-        // On the web the timeout is also capped below Cloudflare's ~100s origin limit, so a slow generation
-        // aborts as a catchable timeout (surfaced as a friendly error below) instead of hanging into a 504.
+        // catchable exception. Only under a web SAPI: a queue worker (CLI) already has unlimited time, and
+        // capping it there would crash the long-lived worker. The timeout is also held below Cloudflare's
+        // ~100s origin limit so a slow generation aborts as a catchable timeout instead of a 504.
         if (PHP_SAPI !== 'cli') {
             $timeout = min($timeout, self::WEB_MAX_TIMEOUT);
             set_time_limit($timeout + 30);
@@ -66,45 +69,43 @@ class AnthropicClient
         // The model is an admin setting, resolved per world (or the global default) — not from env.
         $model = AiModels::forWorld($usage?->worldId);
 
-        try {
-            $response = Http::withHeaders([
-                'x-api-key' => $key,
-                'anthropic-version' => '2023-06-01',
-                'content-type' => 'application/json',
-            ])->timeout($timeout)->post(self::ENDPOINT, [
-                'model' => $model,
-                'max_tokens' => $maxTokens,
-                'system' => $system,
-                'messages' => array_values($messages),
-            ]);
-        } catch (ConnectionException $exception) {
-            // The request timed out (or the connection dropped) before the model replied. Surface a clean,
-            // retryable message rather than letting the request hang into a Cloudflare 504.
-            throw new RuntimeException('The AI took too long to respond — please try again.', previous: $exception);
-        }
+        // The trailing message is the current user turn (the prompt); anything before it is prior history.
+        $history = $messages;
+        $current = array_pop($history);
+        $prompt = is_array($current) ? (string) ($current['content'] ?? '') : (string) $current;
 
-        if (! $response->successful()) {
-            throw new RuntimeException('The AI service returned an error ('.$response->status().').');
+        try {
+            $response = (new AssistantAgent($system, array_values($history), $maxTokens))->prompt(
+                $prompt,
+                provider: 'anthropic',
+                model: $model,
+                timeout: $timeout,
+            );
+        } catch (ProviderConnectionException $exception) {
+            // Timed out or the connection dropped before the model replied — surface a clean, retryable
+            // message rather than letting the request hang into a Cloudflare 504.
+            throw new RuntimeException('The AI took too long to respond — please try again.', previous: $exception);
+        } catch (AiException $exception) {
+            // Any other provider-side failure (overloaded, rate-limited, malformed response) — keep it
+            // user-facing and retryable rather than leaking the SDK's internals.
+            throw new RuntimeException('The AI service is temporarily unavailable — please try again.', previous: $exception);
         }
 
         if ($usage !== null) {
             // Usage logging must never break the AI feature itself, so record failures are reported and
-            // swallowed rather than propagated to the caller.
+            // swallowed rather than propagated to the caller. Price against the model the response reports.
             try {
                 AiUsage::record(
                     $usage,
-                    (string) ($response->json('model') ?? $model),
-                    (int) $response->json('usage.input_tokens', 0),
-                    (int) $response->json('usage.output_tokens', 0),
+                    $response->meta->model ?: $model,
+                    $response->usage->promptTokens,
+                    $response->usage->completionTokens,
                 );
             } catch (Throwable $error) {
                 report($error);
             }
         }
 
-        return collect($response->json('content', []))
-            ->where('type', 'text')
-            ->pluck('text')
-            ->implode("\n");
+        return $response->text;
     }
 }

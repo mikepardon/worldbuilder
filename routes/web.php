@@ -9,6 +9,8 @@ use App\Http\Controllers\Admin\DashboardController as AdminDashboard;
 use App\Http\Controllers\Admin\UsersController as AdminUsers;
 use App\Http\Controllers\AiController;
 use App\Http\Controllers\AiRequestController;
+use App\Http\Controllers\Settings\CreateApiToken;
+use App\Http\Controllers\Settings\DeleteApiToken;
 use App\Http\Controllers\ArticleNoteController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\CalendarController;
@@ -425,6 +427,10 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile/avatar', [ProfileController::class, 'removeAvatar'])->name('profile.avatar.destroy');
     Route::put('/profile/ddb', [ProfileController::class, 'ddb'])->name('profile.ddb');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // Personal access tokens for authenticating MCP clients (Bearer). The plain-text token is returned once.
+    Route::post('/profile/api-tokens', CreateApiToken::class)->name('profile.api-tokens.store');
+    Route::delete('/profile/api-tokens/{token}', DeleteApiToken::class)->name('profile.api-tokens.destroy');
 
     // A player's own billing: current plan, usage, and changing plan.
     Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');

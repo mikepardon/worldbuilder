@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
+import ApiTokensForm from "./Partials/ApiTokensForm.vue";
 import DeleteUserForm from "./Partials/DeleteUserForm.vue";
 import UpdateAvatarForm from "./Partials/UpdateAvatarForm.vue";
 import UpdateDdbKeyForm from "./Partials/UpdateDdbKeyForm.vue";
@@ -17,6 +18,14 @@ defineProps({
     ddbSaved: {
         type: Boolean,
         default: false,
+    },
+    apiTokens: {
+        type: Array,
+        default: () => [],
+    },
+    mcpUrl: {
+        type: String,
+        default: "",
     },
 });
 </script>
@@ -49,6 +58,14 @@ defineProps({
 
                 <div class="panel p-4 sm:p-8">
                     <UpdateDdbKeyForm :ddb-saved="ddbSaved" class="max-w-xl" />
+                </div>
+
+                <div class="panel p-4 sm:p-8">
+                    <ApiTokensForm
+                        :api-tokens="apiTokens"
+                        :mcp-url="mcpUrl"
+                        class="max-w-xl"
+                    />
                 </div>
 
                 <div class="panel p-4 sm:p-8">

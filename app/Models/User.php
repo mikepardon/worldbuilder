@@ -13,13 +13,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable(['name', 'email', 'password', 'ddb_cobalt', 'plan', 'ai_credit_balance', 'avatar_path'])]
 #[Hidden(['password', 'remember_token', 'ddb_cobalt', 'stripe_customer_id', 'stripe_subscription_id', 'avatar_path'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
 
     /** @var list<string> */
     protected $appends = ['avatar_url'];
