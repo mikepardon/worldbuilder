@@ -20,7 +20,7 @@ namespace App\Support;
 class NavMenu
 {
     /** @var list<string> */
-    public const TYPES = ['page', 'section', 'campaign', 'entry', 'link'];
+    public const TYPES = ['page', 'section', 'campaign', 'entry', 'link', 'group'];
 
     /** Built-in reader pages that can be placed in the menu, keyed by target slug. */
     public const PAGES = [
@@ -72,8 +72,9 @@ class NavMenu
             $target = is_string($node['target'] ?? null) ? mb_substr(trim($node['target']), 0, self::MAX_TARGET) : '';
             $children = self::sanitise($node['children'] ?? [], $depth + 1);
 
-            // A node with neither a target nor surviving children is dead weight — drop it.
-            if ($target === '' && $children === []) {
+            // A node with neither a target nor surviving children is dead weight — drop it. A `group`
+            // is a label-only dropdown heading, so it's kept even while empty (children get nested later).
+            if ($target === '' && $children === [] && $type !== 'group') {
                 continue;
             }
 

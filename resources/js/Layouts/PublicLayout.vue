@@ -6,7 +6,7 @@ import ReaderNavMobileItem from "@/Components/ReaderNavMobileItem.vue";
 import ReaderSearchModal from "@/Components/ReaderSearchModal.vue";
 import { scopeReaderCss } from "@/lib/readerCss";
 import { Head, Link, router, usePage } from "@inertiajs/vue3";
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 const props = defineProps({
     campaign: Object,
@@ -127,6 +127,9 @@ const resolveNavNode = (node) => {
         href = node.target;
         external = true;
         label = node.label || node.target;
+    } else if (node.type === "group") {
+        // A label-only heading: never a link itself, only a dropdown parent.
+        label = node.label || "Menu";
     }
 
     const children = (node.children ?? [])
@@ -138,9 +141,12 @@ const resolveNavNode = (node) => {
         return undefined;
     }
 
-    const active = activeKey
+    // A node is highlighted when it's the current page, or when one of its descendants is — so a
+    // dropdown parent lights up while you're inside it.
+    const selfActive = activeKey
         ? props.active === activeKey
         : !external && !!href && currentPath.value === href;
+    const active = selfActive || children.some((child) => child.active);
 
     return {
         key: node.id,
@@ -170,17 +176,25 @@ watch(currentPath, () => {
 const searchModal = ref(null);
 const openSearch = () => searchModal.value?.open();
 
+// The header, so an outside tap can close the open mobile nav panel.
+const headerRef = ref(null);
+const onKeydown = (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        openSearch();
+    } else if (event.key === "Escape") {
+        mobileNavOpen.value = false;
+    }
+};
+const onDocPointerDown = (event) => {
+    if (mobileNavOpen.value && !headerRef.value?.contains(event.target)) {
+        mobileNavOpen.value = false;
+    }
+};
+
 onMounted(() => {
-    const onKeydown = (event) => {
-        if (
-            (event.metaKey || event.ctrlKey) &&
-            event.key.toLowerCase() === "k"
-        ) {
-            event.preventDefault();
-            openSearch();
-        }
-    };
     window.addEventListener("keydown", onKeydown);
+    window.addEventListener("pointerdown", onDocPointerDown);
 
     // Load the GM's privacy-analytics tag once, on the reader only. Both providers track
     // SPA navigations themselves (Plausible via the history API, GA4 via enhanced measurement).
@@ -212,6 +226,11 @@ onMounted(() => {
     }
 
     document.head.appendChild(script);
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener("keydown", onKeydown);
+    window.removeEventListener("pointerdown", onDocPointerDown);
 });
 
 const setView = (asPlayer) => {
@@ -282,6 +301,7 @@ const setView = (asPlayer) => {
         </Head>
 
         <header
+            ref="headerRef"
             class="z-10 border-b border-edge2 bg-surface"
             :class="fullBleed ? '' : 'sticky top-0'"
         >

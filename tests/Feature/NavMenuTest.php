@@ -72,6 +72,19 @@ class NavMenuTest extends TestCase
         $this->assertSame(4, $depth);
     }
 
+    public function test_an_empty_heading_group_survives_sanitising(): void
+    {
+        // A label-only dropdown heading has no target and may have no children yet — but must be kept.
+        $clean = NavMenu::sanitise([
+            ['id' => 'g', 'type' => 'group', 'label' => 'Rulebook', 'target' => '', 'children' => []],
+            ['id' => 'x', 'type' => 'link', 'label' => 'Dead', 'target' => '', 'children' => []],
+        ]);
+
+        $this->assertCount(1, $clean);
+        $this->assertSame('group', $clean[0]['type']);
+        $this->assertSame('Rulebook', $clean[0]['label']);
+    }
+
     public function test_a_world_without_a_saved_menu_falls_back_to_a_default(): void
     {
         $gm = User::factory()->create();

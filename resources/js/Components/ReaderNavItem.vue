@@ -21,14 +21,18 @@ const isInternal = computed(() => !!node.href && !node.external);
 // Distinct group name per depth so each fly-out reacts only to its own hover, not its ancestors'. The
 // literal class strings below are what Tailwind scans — keep them spelled out. Depth is capped at 4.
 const GROUP = ["group/nav0", "group/nav1", "group/nav2", "group/nav3"];
+// Open on hover (mouse) or focus-within (keyboard) — so the fly-out is reachable by tabbing in.
 const SHOW = [
-    "group-hover/nav0:block",
-    "group-hover/nav1:block",
-    "group-hover/nav2:block",
-    "group-hover/nav3:block",
+    "group-hover/nav0:block group-focus-within/nav0:block",
+    "group-hover/nav1:block group-focus-within/nav1:block",
+    "group-hover/nav2:block group-focus-within/nav2:block",
+    "group-hover/nav3:block group-focus-within/nav3:block",
 ];
 const groupClass = computed(() => GROUP[Math.min(depth, GROUP.length - 1)]);
 const showClass = computed(() => SHOW[Math.min(depth, SHOW.length - 1)]);
+
+// Escape closes the fly-out by moving focus out of the group (focus-within then drops).
+const onEscape = (event) => event.target?.blur?.();
 
 // Top-level triggers are inline nav links; nested ones are full-width dropdown rows.
 const triggerClass = computed(() => [
@@ -40,8 +44,17 @@ const triggerClass = computed(() => [
 
 <template>
     <!-- Branch: a node with children (dropdown parent, which may also be a link itself) -->
-    <div v-if="hasChildren" :class="['relative', groupClass]">
-        <Link v-if="isInternal" :href="node.href" :class="triggerClass">
+    <div
+        v-if="hasChildren"
+        :class="['relative', groupClass]"
+        @keydown.escape="onEscape"
+    >
+        <Link
+            v-if="isInternal"
+            :href="node.href"
+            :class="triggerClass"
+            aria-haspopup="true"
+        >
             <span>{{ node.label }}</span>
             <span v-if="node.count" class="ml-1 text-faint">{{
                 node.count
@@ -56,13 +69,19 @@ const triggerClass = computed(() => [
             target="_blank"
             rel="noopener"
             :class="triggerClass"
+            aria-haspopup="true"
         >
             <span>{{ node.label }}</span>
             <span class="ml-1 text-[0.7em] opacity-70">{{
                 top ? "▾" : "▸"
             }}</span>
         </a>
-        <button v-else type="button" :class="triggerClass">
+        <button
+            v-else
+            type="button"
+            :class="triggerClass"
+            aria-haspopup="true"
+        >
             <span>{{ node.label }}</span>
             <span class="ml-1 text-[0.7em] opacity-70">{{
                 top ? "▾" : "▸"
@@ -78,6 +97,7 @@ const triggerClass = computed(() => [
             ]"
         >
             <div
+                role="menu"
                 class="min-w-[11rem] rounded-md border border-white/10 bg-[#0e0f13] py-1 text-left shadow-xl"
             >
                 <ReaderNavItem

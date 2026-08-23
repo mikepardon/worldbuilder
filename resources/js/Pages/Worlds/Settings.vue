@@ -218,6 +218,8 @@ const addNavItem = () => {
         addEntry.value = null;
     } else if (addKind.value === "link") {
         pushNavItem({ type: "link", label: "", target: "" });
+    } else if (addKind.value === "group") {
+        pushNavItem({ type: "group", label: "", target: "" });
     }
 };
 
@@ -227,6 +229,35 @@ const NAV_TYPE_LABELS = {
     campaign: "Campaign",
     entry: "Entry",
     link: "Link",
+    group: "Heading",
+};
+
+// Whether a node still points at something that exists — so the editor can flag menu items whose
+// section/campaign/entry has since been deleted (the reader hides them silently otherwise).
+const pageTargets = computed(
+    () => new Set((props.navPalette.pages ?? []).map((p) => p.target)),
+);
+const sectionTargets = computed(
+    () => new Set((props.navPalette.sections ?? []).map((s) => s.slug)),
+);
+const campaignTargets = computed(
+    () => new Set((props.navPalette.campaigns ?? []).map((c) => c.slug)),
+);
+const entryTargets = computed(
+    () =>
+        new Set(
+            (props.navPalette.entries ?? []).map(
+                (e) => `${e.typeSlug}:${e.slug}`,
+            ),
+        ),
+);
+const navTargetValid = (node) => {
+    if (node.type === "page") return pageTargets.value.has(node.target);
+    if (node.type === "section") return sectionTargets.value.has(node.target);
+    if (node.type === "campaign") return campaignTargets.value.has(node.target);
+    if (node.type === "entry") return entryTargets.value.has(node.target);
+    if (node.type === "link") return /^https?:\/\//i.test(node.target);
+    return true; // headings have no target to break
 };
 const navForm = useForm({ nav_menu: [] });
 const saveNav = () => {
@@ -294,6 +325,7 @@ const navEditor = {
     outdent: outdentNav,
     remove: removeNav,
     typeLabel: (type) => NAV_TYPE_LABELS[type] ?? type,
+    targetValid: navTargetValid,
     sectionImageUrl,
     uploadSectionImage,
     removeSectionImage,
@@ -1164,6 +1196,7 @@ const destroy = () => {
                             <option value="campaign">Campaign</option>
                             <option value="entry">Entry</option>
                             <option value="link">Custom link</option>
+                            <option value="group">Heading (dropdown)</option>
                         </select>
                         <select
                             v-if="addKind === 'page'"

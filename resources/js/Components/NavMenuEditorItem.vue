@@ -16,18 +16,20 @@ const { node, path, depth, isLast, api } = defineProps({
 
 const isFirst = computed(() => path[path.length - 1] === 0);
 const canIndent = computed(() => !isFirst.value && depth < api.maxDepth - 1);
+const targetValid = computed(() => api.targetValid(node));
 // The underlying target, shown as the input's placeholder so a blank label clearly falls back to it.
-const targetHint = computed(() =>
-    node.type === "link"
-        ? "Label"
-        : (node.target.split(":").pop() ?? "") || node.type,
-);
+const targetHint = computed(() => {
+    if (node.type === "link") return "Label";
+    if (node.type === "group") return "Heading";
+    return (node.target.split(":").pop() ?? "") || node.type;
+});
 </script>
 
 <template>
     <div>
         <div
-            class="flex items-center gap-2 rounded-md border border-edge3 px-2 py-1.5"
+            class="flex flex-wrap items-center gap-2 rounded-md border border-edge3 px-2 py-1.5"
+            :class="targetValid ? '' : 'border-red-500/50'"
             :style="{ marginLeft: `${depth * 18}px` }"
         >
             <div class="flex flex-col leading-none">
@@ -72,10 +74,16 @@ const targetHint = computed(() =>
             <span class="font-mono text-[9px] uppercase tracking-[0.1em] text-teal">{{
                 api.typeLabel(node.type)
             }}</span>
+            <span
+                v-if="!targetValid"
+                class="text-red-400"
+                title="This item's target no longer exists — remove it or pick another."
+                >⚠</span
+            >
 
             <input
                 v-model="node.label"
-                class="field !w-40 min-w-0 flex-1 !py-1 text-[13px]"
+                class="field min-w-0 flex-1 basis-full !py-1 text-[13px] sm:basis-0"
                 :placeholder="targetHint"
             />
             <input
