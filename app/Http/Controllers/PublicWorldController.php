@@ -1411,6 +1411,39 @@ class PublicWorldController extends Controller
     {
         $user = Auth::user();
 
+        // GM-only content, surfaced to the owner via the header "SECRETS" menu: wholly-private entries,
+        // plus otherwise-public entries that hide {{secret}}…{{/}} passages. Both link to the entry.
+        // Empty for everyone else.
+        $href = fn (Document $document): string => "/w/{$world->slug}/".Sections::typeSlug($document->kind)."/{$document->slug}";
+
+        $privateEntries = $viewer->isOwner
+            ? $world->documents()->where('is_private', true)->orderBy('title')->get(['kind', 'slug', 'title'])
+                ->map(fn (Document $document): array => [
+                    'title' => $document->title,
+                    'kindLabel' => Sections::kindLabel($document->kind),
+                    'href' => $href($document),
+                    'passages' => 0,
+                    'private' => true,
+                ])
+            : collect();
+
+        $passageEntries = $viewer->isOwner
+            ? $world->documents()->where('is_private', false)->where('content', 'like', '%{{secret}}%')
+                ->orderBy('title')->get(['kind', 'slug', 'title', 'content'])
+                ->map(fn (Document $document): array => [
+                    'title' => $document->title,
+                    'kindLabel' => Sections::kindLabel($document->kind),
+                    'href' => $href($document),
+                    'passages' => Secrets::count($document->content),
+                    'private' => false,
+                ])
+                // A stray "{{secret}}" without its closing tag counts zero — don't list a false positive.
+                ->filter(fn (array $entry): bool => $entry['passages'] > 0)
+                ->values()
+            : collect();
+
+        $secrets = $privateEntries->concat($passageEntries)->values();
+
         return [
             'authed' => $viewer->authed(),
             'isOwner' => $viewer->isOwner,
@@ -1421,7 +1454,8 @@ class PublicWorldController extends Controller
             'initial' => $user ? strtoupper(substr($user->name ?: $user->email, 0, 1)) : '',
             'avatar' => $user?->avatar_url,
             'name' => $user?->name,
-            'secretCount' => $viewer->isOwner ? $world->documents()->where('is_private', true)->count() : 0,
+            'secretCount' => $secrets->count(),
+            'secrets' => $secrets,
         ];
     }
 

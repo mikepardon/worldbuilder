@@ -165,6 +165,14 @@ const resolvedMenu = computed(() =>
         .filter(Boolean),
 );
 
+// The header "SECRETS" menu splits into wholly-private entries and public entries with hidden passages.
+const privateSecrets = computed(() =>
+    (props.viewer?.secrets ?? []).filter((s) => s.private),
+);
+const passageSecrets = computed(() =>
+    (props.viewer?.secrets ?? []).filter((s) => !s.private),
+);
+
 // Mobile nav: a hamburger opens a tap-friendly accordion (the desktop bar uses hover fly-outs, which
 // touch devices can't reach). Close it whenever navigation happens so the panel never lingers.
 const mobileNavOpen = ref(false);
@@ -352,16 +360,78 @@ const setView = (asPlayer) => {
                     />
                 </nav>
 
-                <div class="ml-auto flex items-center gap-3">
-                    <!-- SECRETS badge (GM view) -->
-                    <div
+                <div
+                    class="ml-auto flex flex-wrap items-center justify-end gap-2 sm:gap-3"
+                >
+                    <!-- SECRETS menu (owner): jump to any private (GM-only) entry -->
+                    <Dropdown
                         v-if="viewer.gmView && viewer.secretCount"
-                        class="flex items-center gap-2 rounded-full border border-[#6b4c14] bg-[#241c0e] px-3 py-1 font-mono text-[10px] tracking-[0.12em] text-amber"
+                        align="right"
+                        content-classes="py-1 bg-card w-64 max-h-80 overflow-y-auto"
                     >
-                        SECRETS<span class="text-[#8a6a28]">{{
-                            viewer.secretCount
-                        }}</span>
-                    </div>
+                        <template #trigger>
+                            <button
+                                type="button"
+                                class="flex items-center gap-2 rounded-full border border-[#6b4c14] bg-[#241c0e] px-3 py-1 font-mono text-[10px] tracking-[0.12em] text-amber transition hover:border-amber/70"
+                                title="Private (GM-only) entries"
+                            >
+                                SECRETS<span class="text-[#8a6a28]">{{
+                                    viewer.secretCount
+                                }}</span>
+                            </button>
+                        </template>
+                        <template #content>
+                            <template v-if="privateSecrets.length">
+                                <div
+                                    class="border-b border-edge2 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-faint"
+                                >
+                                    Private entries
+                                </div>
+                                <DropdownLink
+                                    v-for="secret in privateSecrets"
+                                    :key="secret.href"
+                                    :href="secret.href"
+                                >
+                                    <span
+                                        class="flex items-center justify-between gap-2"
+                                    >
+                                        <span class="truncate">{{
+                                            secret.title
+                                        }}</span>
+                                        <span
+                                            class="shrink-0 font-mono text-[9px] uppercase tracking-[0.1em] text-faint"
+                                            >{{ secret.kindLabel }}</span
+                                        >
+                                    </span>
+                                </DropdownLink>
+                            </template>
+
+                            <template v-if="passageSecrets.length">
+                                <div
+                                    class="border-b border-t border-edge2 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-faint"
+                                >
+                                    Hidden passages
+                                </div>
+                                <DropdownLink
+                                    v-for="secret in passageSecrets"
+                                    :key="secret.href"
+                                    :href="secret.href"
+                                >
+                                    <span
+                                        class="flex items-center justify-between gap-2"
+                                    >
+                                        <span class="truncate">{{
+                                            secret.title
+                                        }}</span>
+                                        <span
+                                            class="shrink-0 font-mono text-[9px] uppercase tracking-[0.1em] text-amber/70"
+                                            >{{ secret.passages }} hidden</span
+                                        >
+                                    </span>
+                                </DropdownLink>
+                            </template>
+                        </template>
+                    </Dropdown>
                     <!-- Manage (owner only): jump back to the workspace settings -->
                     <a
                         v-if="campaign.manageUrl"
@@ -383,7 +453,7 @@ const setView = (asPlayer) => {
                                 d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
                             />
                         </svg>
-                        Settings
+                        <span class="hidden sm:inline">Settings</span>
                     </a>
                     <!-- GM / Player toggle (owner) -->
                     <div
