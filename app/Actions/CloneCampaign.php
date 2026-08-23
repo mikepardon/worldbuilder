@@ -227,6 +227,7 @@ class CloneCampaign
                 'player_monster_ids' => collect($room->player_monster_ids ?? [])
                     ->map(fn ($id) => $compendiumMap[(int) $id] ?? null)->filter()->values()->all(),
                 'players_see_tracker' => $room->players_see_tracker,
+                'voice_enabled' => $room->voice_enabled,
             ]);
 
             // A new room auto-creates a "Scene 1"; drop it so the source's scenes clone cleanly.

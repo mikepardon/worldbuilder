@@ -161,6 +161,7 @@ class RoomController extends Controller
                 'active_scene_id' => $room->active_scene_id,
                 'viewing_scene_id' => $sceneId,
                 'players_see_tracker' => $room->players_see_tracker,
+                'voice_enabled' => $room->voice_enabled,
                 'player_monster_ids' => $isGm ? array_map('intval', $room->player_monster_ids ?? []) : [],
                 'members' => $room->members->map(fn ($m) => ['id' => $m->id, 'name' => $m->name]),
                 // The GM's scene list: `active` is live (players see it), `viewing` is the GM's preview.
@@ -265,6 +266,7 @@ class RoomController extends Controller
             'fog' => ['nullable', 'array'],
             'fog.*' => ['string', 'max:16'],
             'players_see_tracker' => ['sometimes', 'boolean'],
+            'voice_enabled' => ['sometimes', 'boolean'],
             'round' => ['sometimes', 'integer', 'min:1'],
             'active_token_id' => ['nullable', 'integer', Rule::exists('room_tokens', 'id')->where('room_id', $room->id)],
             'player_monster_ids' => ['sometimes', 'array'],

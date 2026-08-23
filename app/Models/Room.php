@@ -25,7 +25,7 @@ class Room extends Model
     protected $fillable = [
         'campaign_id', 'created_by', 'image_media_id', 'name', 'code',
         'grid_visible', 'grid_size', 'unit_size', 'unit', 'fog_enabled', 'fog', 'round', 'active_token_id',
-        'player_monster_ids', 'players_see_tracker', 'active_scene_id',
+        'player_monster_ids', 'players_see_tracker', 'voice_enabled', 'active_scene_id',
     ];
 
     protected $casts = [
@@ -42,6 +42,7 @@ class Room extends Model
         'round' => 'int',
         'player_monster_ids' => 'array',
         'players_see_tracker' => 'boolean',
+        'voice_enabled' => 'boolean',
     ];
 
     protected static function booted(): void

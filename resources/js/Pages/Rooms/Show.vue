@@ -1133,6 +1133,35 @@ const onDetailClick = (event) => {
     // Player, no share modifier → fall through to the local dice popover.
 };
 
+// Echo the creature's most recent logged roll inside its own window. The GM's stat-block rolls are
+// private /gmrolls that only surface in the chat log, so without this they'd have to glance away from
+// the sheet to read the result. We mirror the chat message (the authoritative, server-rolled value)
+// rather than re-rolling locally, so the number in the window always matches the number in the log.
+const lastRoll = ref(null);
+const latestRollFor = (label) => {
+    if (!label) return null;
+    for (let i = props.messages.length - 1; i >= 0; i--) {
+        const message = props.messages[i];
+        if (message.roll && (message.roll.as?.name || null) === label) {
+            return message;
+        }
+    }
+    return null;
+};
+// Reset when a different token's sheet opens; seed with that creature's most recent roll (if any).
+watch(detail, (token) => {
+    lastRoll.value = latestRollFor(token?.label);
+});
+// A new roll for the open creature (ours or a shared one) updates the in-window result live.
+watch(
+    () => props.messages,
+    () => {
+        if (!detail.value) return;
+        const latest = latestRollFor(detail.value.label);
+        if (latest) lastRoll.value = latest;
+    },
+);
+
 // Live combat state edited from the sheet (HP, temp HP, death saves, spell slots): update the open
 // token optimistically, then persist it. can_edit gates this to the owner or GM (also server-side).
 const applyCombat = (patch) => {
@@ -1540,6 +1569,15 @@ const toggleCam = async () => {
         .forEach((t) => (t.enabled = camOn.value));
     broadcastState();
 };
+
+// If the GM hides the voice/video section, drop out of any active call so a now-hidden tile can't keep
+// a live mic or camera running.
+watch(
+    () => props.room.voice_enabled,
+    (enabled) => {
+        if (!enabled && inCall.value) leaveCall();
+    },
+);
 
 /* ---- realtime + presence ---- */
 let reloadTimer;
@@ -2964,9 +3002,9 @@ const hasImage = computed(() => !!props.room.image_url);
                     </div>
                 </div>
 
-                <!-- Voice / video + presence -->
+                <!-- Voice / video + presence (GM can hide the whole section for the room) -->
                 <div
-                    v-if="tiles.length"
+                    v-if="tiles.length && room.voice_enabled"
                     class="group absolute bottom-3 left-3 z-20 flex flex-col gap-2"
                     @pointerdown.stop
                     @wheel.stop
@@ -3732,6 +3770,26 @@ const hasImage = computed(() => !!props.room.image_url);
                             "
                         >
                             {{ room.players_see_tracker ? "On" : "Off" }}
+                        </button>
+                    </label>
+
+                    <label
+                        class="flex items-center justify-between text-sm text-muted"
+                    >
+                        Camera / Mic
+                        <button
+                            type="button"
+                            class="rounded-full px-3 py-1 font-mono text-[10px] uppercase tracking-[0.1em]"
+                            :class="
+                                room.voice_enabled
+                                    ? 'border border-amber/60 bg-amber/10 text-amber'
+                                    : 'border border-edge3 text-faint'
+                            "
+                            @click="
+                                saveRoom({ voice_enabled: !room.voice_enabled })
+                            "
+                        >
+                            {{ room.voice_enabled ? "On" : "Off" }}
                         </button>
                     </label>
 
@@ -4525,6 +4583,56 @@ const hasImage = computed(() => !!props.room.image_url);
                             : "Ctrl-click to send a roll to chat · Shift/Alt = advantage/disadvantage"
                     }}
                 </p>
+                <!-- Last roll for this creature, echoed in-window (mirrors the chat log) -->
+                <div
+                    v-if="lastRoll && lastRoll.roll"
+                    class="mb-3 flex items-center gap-3 rounded-lg border-2 border-white/70 bg-black px-3 py-2 shadow-[inset_0_0_0_2px_#000,inset_0_0_0_3px_rgba(255,255,255,0.35)]"
+                >
+                    <div
+                        class="font-display text-3xl leading-none"
+                        :class="
+                            lastRoll.roll.d20 === 20
+                                ? 'text-[#5ea564]'
+                                : lastRoll.roll.d20 === 1
+                                  ? 'text-red-500'
+                                  : 'text-amber'
+                        "
+                    >
+                        {{ lastRoll.roll.total }}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="text-[13px] font-semibold text-white">
+                            {{ lastRoll.roll.expr }}
+                        </div>
+                        <div class="truncate font-mono text-[10px] text-white/45">
+                            {{ lastRoll.roll.detail }}
+                        </div>
+                        <div
+                            v-if="lastRoll.roll.mode"
+                            class="font-mono text-[10px]"
+                        >
+                            <span class="uppercase text-amber/80">{{
+                                lastRoll.roll.mode
+                            }}</span>
+                            <span
+                                v-if="
+                                    lastRoll.roll.dropped &&
+                                    lastRoll.roll.dropped.length
+                                "
+                                class="ml-1 text-white/40 line-through"
+                                >dropped
+                                {{ lastRoll.roll.dropped.join(", ") }}</span
+                            >
+                        </div>
+                    </div>
+                    <button
+                        class="shrink-0 text-white/40 hover:text-white"
+                        title="Clear"
+                        @click="lastRoll = null"
+                    >
+                        ✕
+                    </button>
+                </div>
                 <StatblockCard
                     v-if="showStatblock"
                     :block="detail.statblock.block"
