@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\NavMenu;
 use App\Support\Sections;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -275,6 +276,31 @@ class World extends Model
             'order' => array_values(array_map('strval', (array) data_get($this->settings, 'nav_order', []))),
             'links' => $links,
         ];
+    }
+
+    /**
+     * The reader's navigation menu tree as the GM saved it (sanitised), or an empty list if they
+     * haven't customised it yet. See {@see NavMenu} for the node shape.
+     *
+     * @return list<array{id: string, type: string, label: string, target: string, children: list<mixed>}>
+     */
+    public function readerMenu(): array
+    {
+        return NavMenu::sanitise((array) data_get($this->settings, 'nav_menu', []));
+    }
+
+    /**
+     * The reader's menu tree, falling back to the sensible default (built from any legacy flat-nav
+     * choices) when the GM hasn't saved a custom menu. Used by both the reader and the menu editor so
+     * they always agree on the starting point.
+     *
+     * @return list<array{id: string, type: string, label: string, target: string, children: list<mixed>}>
+     */
+    public function readerMenuOrDefault(): array
+    {
+        $menu = $this->readerMenu();
+
+        return $menu === [] ? NavMenu::defaultTree($this->readerNav()) : $menu;
     }
 
     /** Whether this world has a custom domain that's been confirmed as pointing at us. */

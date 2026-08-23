@@ -1,10 +1,12 @@
 <script setup>
 import Dropdown from "@/Components/Dropdown.vue";
 import DropdownLink from "@/Components/DropdownLink.vue";
+import ReaderNavItem from "@/Components/ReaderNavItem.vue";
+import ReaderNavMobileItem from "@/Components/ReaderNavMobileItem.vue";
 import ReaderSearchModal from "@/Components/ReaderSearchModal.vue";
 import { scopeReaderCss } from "@/lib/readerCss";
-import { Head, Link, router } from "@inertiajs/vue3";
-import { computed, onMounted, ref } from "vue";
+import { Head, Link, router, usePage } from "@inertiajs/vue3";
+import { computed, onMounted, ref, watch } from "vue";
 
 const props = defineProps({
     campaign: Object,
@@ -58,22 +60,111 @@ const themeVars = computed(() => {
 // The GM's custom CSS, scoped to the reader root (.wb-reader) and stripped of unsafe constructs.
 const customCss = computed(() => scopeReaderCss(props.campaign?.css ?? ""));
 
-// Reader nav: hide sections the GM turned off, then apply their custom order (unlisted sections trail).
-const navSections = computed(() => {
-    const nav = props.campaign?.nav ?? {};
-    const hidden = new Set(nav.hidden ?? []);
-    const order = nav.order ?? [];
-    const list = props.sections.filter((s) => !hidden.has(s.slug));
-    if (!order.length) {
-        return list;
+// Reader nav: resolve the GM's saved menu tree into real links. Each node's target is turned into an
+// href/label/count here; items the viewer can't reach (a disabled feature, an empty section, a deleted
+// entry) are dropped, and a parent with no reachable children collapses too. Fully data-driven — the
+// menu decides the order, nesting and which built-in pages appear.
+const page = usePage();
+const currentPath = computed(() => (page.url ?? "").split("?")[0]);
+const PAGE_LABELS = {
+    overview: "Overview",
+    compendium: "Compendium",
+    web: "Web",
+    campaigns: "Campaigns",
+    maps: "Maps",
+};
+
+const resolveNavNode = (node) => {
+    const slug = props.campaign?.slug;
+    const flags = props.campaign ?? {};
+    let href;
+    let external = false;
+    let count;
+    let available = false;
+    let activeKey;
+    let label = node.label;
+
+    if (node.type === "page") {
+        const target = node.target;
+        available = {
+            overview: true,
+            compendium: !!flags.hasCompendium,
+            web: !!flags.hasWeb,
+            campaigns: !!flags.hasCampaigns,
+            maps: !!flags.hasMaps,
+        }[target];
+        href = target === "overview" ? `/w/${slug}` : `/w/${slug}/${target}`;
+        label = node.label || PAGE_LABELS[target] || target;
+        activeKey = target;
+    } else if (node.type === "section") {
+        const section = props.sections.find((s) => s.slug === node.target);
+        available = !!section;
+        if (section) {
+            href = `/w/${slug}/s/${section.slug}`;
+            count = section.count;
+            label = node.label || section.label;
+            activeKey = section.slug;
+        }
+    } else if (node.type === "campaign") {
+        const found = (props.campaign?.navCampaigns ?? []).find(
+            (c) => c.slug === node.target,
+        );
+        available = !!found;
+        if (found) {
+            href = `/w/${slug}/campaigns/${found.slug}`;
+            label = node.label || found.name;
+        }
+    } else if (node.type === "entry") {
+        const found = (props.campaign?.navEntries ?? {})[node.target];
+        available = !!found;
+        if (found) {
+            const [type, entrySlug] = node.target.split(":");
+            href = `/w/${slug}/${type}/${entrySlug}`;
+            label = node.label || found.title;
+        }
+    } else if (node.type === "link") {
+        available = !!node.target;
+        href = node.target;
+        external = true;
+        label = node.label || node.target;
     }
-    const rank = (slug) => {
-        const i = order.indexOf(slug);
-        return i === -1 ? order.length : i;
+
+    const children = (node.children ?? [])
+        .map(resolveNavNode)
+        .filter(Boolean);
+
+    // Keep a node only if it's a working link or a container with something inside it.
+    if (!available && !children.length) {
+        return undefined;
+    }
+
+    const active = activeKey
+        ? props.active === activeKey
+        : !external && !!href && currentPath.value === href;
+
+    return {
+        key: node.id,
+        label,
+        href: available ? href : undefined,
+        external,
+        count,
+        active,
+        children,
     };
-    return [...list].sort((a, b) => rank(a.slug) - rank(b.slug));
+};
+
+const resolvedMenu = computed(() =>
+    (props.campaign?.navMenu ?? [])
+        .map(resolveNavNode)
+        .filter(Boolean),
+);
+
+// Mobile nav: a hamburger opens a tap-friendly accordion (the desktop bar uses hover fly-outs, which
+// touch devices can't reach). Close it whenever navigation happens so the panel never lingers.
+const mobileNavOpen = ref(false);
+watch(currentPath, () => {
+    mobileNavOpen.value = false;
 });
-const navLinks = computed(() => props.campaign?.nav?.links ?? []);
 
 // Live search overlay, opened from the header icon or Cmd/Ctrl+K.
 const searchModal = ref(null);
@@ -231,64 +322,14 @@ const setView = (asPlayer) => {
                 </button>
 
                 <nav
-                    class="flex flex-wrap items-center gap-4 font-mono text-xs uppercase tracking-wider"
+                    class="hidden flex-wrap items-center gap-4 font-mono text-xs uppercase tracking-wider md:flex"
                 >
-                    <Link
-                        :href="`/w/${campaign.slug}`"
-                        class="hover:text-teal"
-                        :class="
-                            active === 'overview' ? 'text-amber' : 'text-muted'
-                        "
-                        >Overview</Link
-                    >
-                    <Link
-                        v-for="s in navSections"
-                        :key="s.slug"
-                        :href="`/w/${campaign.slug}/s/${s.slug}`"
-                        class="hover:text-teal"
-                        :class="active === s.slug ? 'text-amber' : 'text-muted'"
-                    >
-                        {{ s.label
-                        }}<span v-if="s.count" class="ml-1 text-faint">{{
-                            s.count
-                        }}</span>
-                    </Link>
-                    <Link
-                        v-if="campaign.hasCompendium"
-                        :href="`/w/${campaign.slug}/compendium`"
-                        class="hover:text-teal"
-                        :class="
-                            active === 'compendium'
-                                ? 'text-amber'
-                                : 'text-muted'
-                        "
-                        >Compendium</Link
-                    >
-                    <Link
-                        v-if="campaign.hasWeb"
-                        :href="`/w/${campaign.slug}/web`"
-                        class="hover:text-teal"
-                        :class="active === 'web' ? 'text-amber' : 'text-muted'"
-                        >Web</Link
-                    >
-                    <Link
-                        v-if="campaign.hasCampaigns"
-                        :href="`/w/${campaign.slug}/campaigns`"
-                        class="hover:text-teal"
-                        :class="
-                            active === 'campaigns' ? 'text-amber' : 'text-muted'
-                        "
-                        >Campaigns</Link
-                    >
-                    <a
-                        v-for="(l, i) in navLinks"
-                        :key="`nav-link-${i}`"
-                        :href="l.url"
-                        target="_blank"
-                        rel="noopener"
-                        class="text-muted hover:text-teal"
-                        >{{ l.label }}</a
-                    >
+                    <ReaderNavItem
+                        v-for="item in resolvedMenu"
+                        :key="item.key"
+                        :node="item"
+                        :depth="0"
+                    />
                 </nav>
 
                 <div class="ml-auto flex items-center gap-3">
@@ -399,8 +440,51 @@ const setView = (asPlayer) => {
                         class="text-sm text-muted hover:text-teal"
                         >Sign in</Link
                     >
+
+                    <!-- Mobile: hamburger toggles the accordion panel below -->
+                    <button
+                        v-if="resolvedMenu.length"
+                        type="button"
+                        class="flex-shrink-0 text-muted transition hover:text-teal md:hidden"
+                        :aria-expanded="mobileNavOpen"
+                        aria-label="Menu"
+                        @click="mobileNavOpen = !mobileNavOpen"
+                    >
+                        <svg
+                            class="h-5 w-5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <template v-if="mobileNavOpen">
+                                <path d="M18 6 6 18" />
+                                <path d="m6 6 12 12" />
+                            </template>
+                            <template v-else>
+                                <path d="M3 12h18" />
+                                <path d="M3 6h18" />
+                                <path d="M3 18h18" />
+                            </template>
+                        </svg>
+                    </button>
                 </div>
             </div>
+
+            <!-- Mobile nav panel: tap-to-expand accordion of the same resolved menu -->
+            <nav
+                v-if="mobileNavOpen"
+                class="border-t border-edge2 px-6 py-2 font-mono text-xs uppercase tracking-wider md:hidden"
+            >
+                <ReaderNavMobileItem
+                    v-for="item in resolvedMenu"
+                    :key="item.key"
+                    :node="item"
+                    :depth="0"
+                />
+            </nav>
         </header>
 
         <ReaderSearchModal ref="searchModal" :world-slug="campaign.slug" />

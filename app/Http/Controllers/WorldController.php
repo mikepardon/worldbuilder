@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Data\DocumentSummaryData;
+use App\Models\Campaign;
 use App\Models\Document;
 use App\Models\Media;
 use App\Models\Session;
 use App\Models\User;
 use App\Models\World;
 use App\Support\Connections;
+use App\Support\NavMenu;
 use App\Support\Sections;
 use App\Support\WorldNav;
 use Illuminate\Http\Request;
@@ -259,6 +261,9 @@ class WorldController extends Controller
             'nav_links' => ['sometimes', 'array', 'max:8'],
             'nav_links.*.label' => ['required', 'string', 'max:40'],
             'nav_links.*.url' => ['required', 'url', 'max:255'],
+            // The reader nav menu tree (WordPress-style). Deep-validated + sanitised via NavMenu below,
+            // since arbitrary-depth trees can't be expressed with flat array rules.
+            'nav_menu' => ['sometimes', 'array'],
             'support_url' => ['sometimes', 'nullable', 'url', 'max:255'],
             'support_label' => ['sometimes', 'nullable', 'string', 'max:40'],
             'discord_webhook' => ['sometimes', 'nullable', 'url', 'max:255', 'starts_with:https://discord.com/api/webhooks/,https://discordapp.com/api/webhooks/'],
@@ -293,6 +298,12 @@ class WorldController extends Controller
                 $settings[$key] = $data[$key];
             }
         }
+
+        // The nav menu is a tree — sanitise it (reject-by-default) rather than storing raw.
+        if (array_key_exists('nav_menu', $data)) {
+            $settings['nav_menu'] = NavMenu::sanitise($data['nav_menu']);
+        }
+
         $world->settings = $settings;
 
         $world->save();
@@ -354,6 +365,28 @@ class WorldController extends Controller
             'sectionCatalogue' => collect(Sections::withCounts($world->documents()->get(['id', 'kind', 'is_private'])))
                 ->map(fn (array $section): array => ['slug' => $section['slug'], 'label' => $section['label']])
                 ->values(),
+            // The current nav menu tree (or the default), plus everything the "Add item" palette can offer.
+            'navMenu' => $world->readerMenuOrDefault(),
+            'navPalette' => [
+                'pages' => collect(NavMenu::PAGES)->map(fn (string $label, string $target): array => [
+                    'target' => $target, 'label' => $label,
+                ])->values(),
+                'sections' => collect(Sections::SECTIONS)
+                    ->map(fn (array $section): array => ['slug' => $section['slug'], 'label' => $section['label']])
+                    ->values(),
+                'campaigns' => $world->campaigns
+                    ->map(fn (Campaign $campaign): array => ['slug' => $campaign->slug, 'name' => $campaign->name])
+                    ->values(),
+                'entries' => $world->documents()->orderBy('title')->get(['id', 'kind', 'slug', 'title'])
+                    ->map(fn (Document $document): array => [
+                        'id' => $document->id,
+                        'title' => $document->title,
+                        'kind' => $document->kind,
+                        'kindLabel' => Sections::kindLabel($document->kind),
+                        'typeSlug' => Sections::typeSlug($document->kind),
+                        'slug' => $document->slug,
+                    ]),
+            ],
             'isOwner' => $world->user_id === $request->user()->id,
             'links' => [
                 'collaborators' => route('worlds.members.index', $world->id),

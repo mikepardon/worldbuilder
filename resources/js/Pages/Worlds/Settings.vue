@@ -1,4 +1,6 @@
 <script setup>
+import EntryPicker from "@/Components/EntryPicker.vue";
+import NavMenuEditorItem from "@/Components/NavMenuEditorItem.vue";
 import WorldLayout from "@/Layouts/WorldLayout.vue";
 import { Head, Link, router, useForm } from "@inertiajs/vue3";
 import { computed, ref } from "vue";
@@ -10,6 +12,8 @@ const props = defineProps({
     links: Object,
     domain: Object,
     sectionCatalogue: { type: Array, default: () => [] },
+    navMenu: { type: Array, default: () => [] },
+    navPalette: { type: Object, default: () => ({}) },
 });
 
 const tab = ref("general");
@@ -83,44 +87,150 @@ const clearReaderPassword = () => {
     });
 };
 
-// Reader nav editor — its own form so reordering/hiding sections and external links save independently.
-const catalogueLabel = (slug) =>
-    props.sectionCatalogue.find((s) => s.slug === slug)?.label ?? slug;
-const savedOrder = (props.settings.nav?.order ?? []).filter((slug) =>
-    props.sectionCatalogue.some((s) => s.slug === slug),
-);
-const orderedSlugs = [
-    ...savedOrder,
-    ...props.sectionCatalogue
-        .map((s) => s.slug)
-        .filter((slug) => !savedOrder.includes(slug)),
-];
-const hiddenInit = new Set(props.settings.nav?.hidden ?? []);
-const navRows = ref(
-    orderedSlugs.map((slug) => ({
-        slug,
-        label: catalogueLabel(slug),
-        hidden: hiddenInit.has(slug),
-    })),
-);
-const navLinks = ref((props.settings.nav?.links ?? []).map((l) => ({ ...l })));
-const moveNav = (index, delta) => {
-    const target = index + delta;
-    if (target < 0 || target >= navRows.value.length) {
-        return;
+// Reader nav-menu editor — a WordPress-style tree. Items can be built-in pages, content sections,
+// specific campaigns/entries, or custom links, nested to any depth via indent/outdent. Saves as one
+// `nav_menu` tree, sanitised server-side (see NavMenu).
+const MAX_NAV_DEPTH = 4; // four levels deep (depth index 0..3)
+let navIdSeq = 0;
+const newNavId = () => `new-${navIdSeq++}`;
+const cloneNavTree = (nodes) =>
+    nodes.map((node) => ({
+        id: node.id ?? newNavId(),
+        type: node.type,
+        label: node.label ?? "",
+        target: node.target ?? "",
+        children: cloneNavTree(node.children ?? []),
+    }));
+const navTree = ref(cloneNavTree(props.navMenu ?? []));
+
+const subtreeHeight = (node) =>
+    node.children.length
+        ? 1 + Math.max(...node.children.map(subtreeHeight))
+        : 0;
+// The array that holds the node at `path`, plus its index within it.
+const navContainer = (path) => {
+    let arr = navTree.value;
+    for (let i = 0; i < path.length - 1; i++) {
+        arr = arr[path[i]].children;
     }
-    const rows = navRows.value;
-    [rows[index], rows[target]] = [rows[target], rows[index]];
+    return { arr, index: path[path.length - 1] };
 };
-const addNavLink = () => navLinks.value.push({ label: "", url: "" });
-const removeNavLink = (index) => navLinks.value.splice(index, 1);
-const navForm = useForm({ nav_order: [], nav_hidden: [], nav_links: [] });
+const moveNav = (path, delta) => {
+    const { arr, index } = navContainer(path);
+    const target = index + delta;
+    if (target < 0 || target >= arr.length) return;
+    [arr[index], arr[target]] = [arr[target], arr[index]];
+};
+const indentNav = (path) => {
+    const { arr, index } = navContainer(path);
+    if (index === 0) return;
+    const node = arr[index];
+    // Would nesting push the deepest descendant past the depth cap? Then refuse.
+    if (path.length + subtreeHeight(node) >= MAX_NAV_DEPTH) return;
+    arr.splice(index, 1);
+    arr[index - 1].children.push(node);
+};
+const outdentNav = (path) => {
+    if (path.length <= 1) return;
+    const { arr, index } = navContainer(path);
+    const { arr: parentArr, index: parentIndex } = navContainer(
+        path.slice(0, -1),
+    );
+    const [node] = arr.splice(index, 1);
+    parentArr.splice(parentIndex + 1, 0, node);
+};
+const removeNav = (path) => {
+    const { arr, index } = navContainer(path);
+    const [node] = arr.splice(index, 1);
+    // Promote children into the removed node's slot so a stray delete doesn't drop a whole subtree.
+    if (node.children.length) arr.splice(index, 0, ...node.children);
+};
+
+// Targets already placed, so the palette won't offer a page/section/campaign twice.
+const collectUsed = (nodes, set) => {
+    for (const node of nodes) {
+        set.add(`${node.type}:${node.target}`);
+        collectUsed(node.children, set);
+    }
+    return set;
+};
+const usedNavTargets = computed(() => collectUsed(navTree.value, new Set()));
+const isNavUsed = (type, target) =>
+    usedNavTargets.value.has(`${type}:${target}`);
+const availablePages = computed(() =>
+    (props.navPalette.pages ?? []).filter((p) => !isNavUsed("page", p.target)),
+);
+const availableSections = computed(() =>
+    (props.navPalette.sections ?? []).filter(
+        (s) => !isNavUsed("section", s.slug),
+    ),
+);
+const availableCampaigns = computed(() =>
+    (props.navPalette.campaigns ?? []).filter(
+        (c) => !isNavUsed("campaign", c.slug),
+    ),
+);
+
+// "Add item" palette.
+const addKind = ref("page");
+const addPage = ref("");
+const addSection = ref("");
+const addCampaign = ref("");
+const addEntry = ref(null);
+const pushNavItem = (fields) =>
+    navTree.value.push({ id: newNavId(), children: [], ...fields });
+const addNavItem = () => {
+    if (addKind.value === "page" && addPage.value) {
+        const page = props.navPalette.pages.find(
+            (p) => p.target === addPage.value,
+        );
+        pushNavItem({ type: "page", label: page.label, target: page.target });
+        addPage.value = "";
+    } else if (addKind.value === "section" && addSection.value) {
+        const section = props.navPalette.sections.find(
+            (s) => s.slug === addSection.value,
+        );
+        pushNavItem({
+            type: "section",
+            label: section.label,
+            target: section.slug,
+        });
+        addSection.value = "";
+    } else if (addKind.value === "campaign" && addCampaign.value) {
+        const campaign = props.navPalette.campaigns.find(
+            (c) => c.slug === addCampaign.value,
+        );
+        pushNavItem({
+            type: "campaign",
+            label: campaign.name,
+            target: campaign.slug,
+        });
+        addCampaign.value = "";
+    } else if (addKind.value === "entry" && addEntry.value) {
+        const entry = props.navPalette.entries.find(
+            (e) => e.id === addEntry.value,
+        );
+        pushNavItem({
+            type: "entry",
+            label: entry.title,
+            target: `${entry.typeSlug}:${entry.slug}`,
+        });
+        addEntry.value = null;
+    } else if (addKind.value === "link") {
+        pushNavItem({ type: "link", label: "", target: "" });
+    }
+};
+
+const NAV_TYPE_LABELS = {
+    page: "Page",
+    section: "Section",
+    campaign: "Campaign",
+    entry: "Entry",
+    link: "Link",
+};
+const navForm = useForm({ nav_menu: [] });
 const saveNav = () => {
-    navForm.nav_order = navRows.value.map((r) => r.slug);
-    navForm.nav_hidden = navRows.value
-        .filter((r) => r.hidden)
-        .map((r) => r.slug);
-    navForm.nav_links = navLinks.value.filter((l) => l.label && l.url);
+    navForm.nav_menu = navTree.value;
     navForm.put(route("worlds.update", props.world.id), {
         preserveScroll: true,
     });
@@ -174,6 +284,20 @@ const removeSectionImage = (slug) =>
         data: { section: slug },
         preserveScroll: true,
     });
+
+// Callbacks the recursive nav rows (NavMenuEditorItem) call, addressed by each row's path into the tree.
+// Defined here so it can close over the section-image helpers above.
+const navEditor = {
+    maxDepth: MAX_NAV_DEPTH,
+    move: moveNav,
+    indent: indentNav,
+    outdent: outdentNav,
+    remove: removeNav,
+    typeLabel: (type) => NAV_TYPE_LABELS[type] ?? type,
+    sectionImageUrl,
+    uploadSectionImage,
+    removeSectionImage,
+};
 
 const readerThemes = [
     { value: "teal", hex: "#6fbfc4" },
@@ -1000,93 +1124,27 @@ const destroy = () => {
                 <div>
                     <h2 class="font-display text-lg text-bright">Navigation</h2>
                     <p class="text-xs text-faint">
-                        Reorder or hide the reader's sections, give each a cover
-                        image for its "Start here" card, and add your own links to
-                        the nav.
+                        Build your reader's menu. Add built-in pages, content
+                        sections, a specific campaign or entry, or your own
+                        links; reorder with the arrows and indent (→) an item to
+                        nest it under the one above, creating dropdowns. Give a
+                        section a cover image for its "Start here" card.
                     </p>
                 </div>
 
                 <div class="flex flex-col gap-1.5">
-                    <div
-                        v-for="(row, i) in navRows"
-                        :key="row.slug"
-                        class="flex items-center gap-3 rounded-md border border-edge3 px-3 py-2"
-                    >
-                        <div class="flex flex-col leading-none">
-                            <button
-                                type="button"
-                                class="text-faint hover:text-teal disabled:opacity-30"
-                                :disabled="i === 0"
-                                title="Move up"
-                                @click="moveNav(i, -1)"
-                            >
-                                ▲
-                            </button>
-                            <button
-                                type="button"
-                                class="text-faint hover:text-teal disabled:opacity-30"
-                                :disabled="i === navRows.length - 1"
-                                title="Move down"
-                                @click="moveNav(i, 1)"
-                            >
-                                ▼
-                            </button>
-                        </div>
-                        <span
-                            class="flex-1 text-sm"
-                            :class="
-                                row.hidden
-                                    ? 'text-faint line-through'
-                                    : 'text-ink'
-                            "
-                            >{{ row.label }}</span
-                        >
-                        <div class="flex items-center gap-2">
-                            <div
-                                class="h-8 w-12 shrink-0 overflow-hidden rounded border border-edge3 bg-raised bg-cover bg-center"
-                                :style="
-                                    sectionImageUrl(row.slug)
-                                        ? {
-                                              backgroundImage: `url(${sectionImageUrl(
-                                                  row.slug,
-                                              )})`,
-                                          }
-                                        : {}
-                                "
-                            ></div>
-                            <label
-                                class="cursor-pointer text-xs text-muted hover:text-teal"
-                                :title="
-                                    sectionImageUrl(row.slug)
-                                        ? 'Replace image'
-                                        : 'Upload image'
-                                "
-                            >
-                                {{ sectionImageUrl(row.slug) ? "Replace" : "Image" }}
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    class="hidden"
-                                    @change="uploadSectionImage(row.slug, $event)"
-                                />
-                            </label>
-                            <button
-                                v-if="sectionImageUrl(row.slug)"
-                                type="button"
-                                class="text-xs text-faint hover:text-red-400"
-                                title="Remove image"
-                                @click="removeSectionImage(row.slug)"
-                            >
-                                ✕
-                            </button>
-                        </div>
-                        <label
-                            class="flex items-center gap-1.5 text-xs text-muted"
-                        >
-                            <input v-model="row.hidden" type="checkbox" />
-                            Hidden
-                        </label>
-                    </div>
+                    <NavMenuEditorItem
+                        v-for="(node, i) in navTree"
+                        :key="node.id"
+                        :node="node"
+                        :path="[i]"
+                        :depth="0"
+                        :is-last="i === navTree.length - 1"
+                        :api="navEditor"
+                    />
+                    <p v-if="!navTree.length" class="text-xs text-faint">
+                        No menu items yet — add one below.
+                    </p>
                     <span
                         v-if="sectionImageForm.errors.file"
                         class="text-xs text-red-400"
@@ -1094,44 +1152,83 @@ const destroy = () => {
                     >
                 </div>
 
-                <div>
-                    <span class="mb-1 block text-xs text-faint"
-                        >Custom links</span
-                    >
-                    <div class="flex flex-col gap-2">
-                        <div
-                            v-for="(l, i) in navLinks"
-                            :key="i"
-                            class="flex flex-wrap items-center gap-2"
+                <div class="space-y-2 rounded-md border border-edge3 p-3">
+                    <span class="block text-xs text-faint">Add an item</span>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select
+                            v-model="addKind"
+                            class="field !w-36 !py-1.5 text-[13px]"
                         >
-                            <input
-                                v-model="l.label"
-                                class="field !w-40"
-                                placeholder="Label"
-                            />
-                            <input
-                                v-model="l.url"
-                                type="url"
-                                class="field min-w-0 flex-1"
-                                placeholder="https://…"
-                            />
-                            <button
-                                type="button"
-                                class="shrink-0 text-faint hover:text-red-400"
-                                title="Remove"
-                                @click="removeNavLink(i)"
+                            <option value="page">Page</option>
+                            <option value="section">Section</option>
+                            <option value="campaign">Campaign</option>
+                            <option value="entry">Entry</option>
+                            <option value="link">Custom link</option>
+                        </select>
+                        <select
+                            v-if="addKind === 'page'"
+                            v-model="addPage"
+                            class="field min-w-[12rem] flex-1 !py-1.5 text-[13px]"
+                        >
+                            <option value="">Choose a page…</option>
+                            <option
+                                v-for="p in availablePages"
+                                :key="p.target"
+                                :value="p.target"
                             >
-                                ✕
-                            </button>
+                                {{ p.label }}
+                            </option>
+                        </select>
+                        <select
+                            v-else-if="addKind === 'section'"
+                            v-model="addSection"
+                            class="field min-w-[12rem] flex-1 !py-1.5 text-[13px]"
+                        >
+                            <option value="">Choose a section…</option>
+                            <option
+                                v-for="s in availableSections"
+                                :key="s.slug"
+                                :value="s.slug"
+                            >
+                                {{ s.label }}
+                            </option>
+                        </select>
+                        <select
+                            v-else-if="addKind === 'campaign'"
+                            v-model="addCampaign"
+                            class="field min-w-[12rem] flex-1 !py-1.5 text-[13px]"
+                        >
+                            <option value="">Choose a campaign…</option>
+                            <option
+                                v-for="c in availableCampaigns"
+                                :key="c.slug"
+                                :value="c.slug"
+                            >
+                                {{ c.name }}
+                            </option>
+                        </select>
+                        <div
+                            v-else-if="addKind === 'entry'"
+                            class="min-w-[14rem] flex-1"
+                        >
+                            <EntryPicker
+                                v-model="addEntry"
+                                :entries="navPalette.entries ?? []"
+                                placeholder="Search entries…"
+                            />
                         </div>
+                        <button
+                            type="button"
+                            class="btn-ghost shrink-0"
+                            @click="addNavItem"
+                        >
+                            Add
+                        </button>
                     </div>
-                    <button
-                        type="button"
-                        class="mt-2 text-sm text-teal hover:underline"
-                        @click="addNavLink"
-                    >
-                        + Add link
-                    </button>
+                    <p class="text-[11px] text-faint">
+                        New items land at the end — use ▲▼ to move and → to nest
+                        them.
+                    </p>
                 </div>
 
                 <div class="flex items-center gap-3">

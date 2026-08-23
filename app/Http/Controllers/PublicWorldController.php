@@ -26,6 +26,7 @@ use App\Support\Connections;
 use App\Support\DocFields;
 use App\Support\EntryRefs;
 use App\Support\Facts;
+use App\Support\NavMenu;
 use App\Support\Secrets;
 use App\Support\Sections;
 use App\Support\TemplateBlocks;
@@ -1441,6 +1442,18 @@ class PublicWorldController extends Controller
 
     protected function head(World $world, Viewer $viewer): array
     {
+        // The reader nav menu (raw tree) is resolved to hrefs/labels/counts client-side. The client can
+        // check feature flags and section counts itself, but not whether a linked campaign/entry is still
+        // visible to this viewer — so we resolve just those referenced targets here.
+        $menu = $world->readerMenuOrDefault();
+
+        $navCampaigns = $world->campaigns
+            ->filter(fn (Campaign $campaign): bool => $this->campaignIsListed($campaign, $viewer))
+            ->map(fn (Campaign $campaign): array => ['slug' => $campaign->slug, 'name' => $campaign->name])
+            ->values();
+
+        $navEntries = $this->resolveNavEntries($world, $viewer, NavMenu::collectTargets($menu, 'entry'));
+
         return [
             'code' => $world->code,
             'slug' => $world->slug,
@@ -1479,6 +1492,11 @@ class PublicWorldController extends Controller
             'numberSessions' => $world->readerNumbersSessions(),
             // Reader nav customisation (hide/reorder sections + extra external links).
             'nav' => $world->readerNav(),
+            // The nav menu tree (WordPress-style), resolved to real links by the reader. The lookups
+            // below let it validate campaign/entry targets without exposing the whole world.
+            'navMenu' => $menu,
+            'navCampaigns' => $navCampaigns,
+            'navEntries' => $navEntries,
             // Social-share (Open Graph) image, falling back to the banner.
             'ogImage' => $world->socialImageUrl(),
             // Optional creator support link (Patreon/Ko-fi/etc.).
@@ -1491,6 +1509,45 @@ class PublicWorldController extends Controller
             // Privacy-analytics tag for the reader; never loaded for the GM's own previews.
             'analytics' => $viewer->seesPrivate() ? null : $world->readerAnalytics(),
         ];
+    }
+
+    /**
+     * Resolve the entry targets a nav menu references ("typeSlug:slug") to their titles, dropping any
+     * this viewer can't see. Keyed by the same "typeSlug:slug" string the menu stores.
+     *
+     * @param  list<string>  $targets
+     * @return array<string, array{title: string}>
+     */
+    protected function resolveNavEntries(World $world, Viewer $viewer, array $targets): array
+    {
+        if ($targets === []) {
+            return [];
+        }
+
+        $slugs = [];
+        foreach ($targets as $target) {
+            [, $slug] = array_pad(explode(':', $target, 2), 2, '');
+            if ($slug !== '') {
+                $slugs[] = $slug;
+            }
+        }
+        if ($slugs === []) {
+            return [];
+        }
+
+        $entries = $world->documents()
+            ->whereIn('slug', array_values(array_unique($slugs)))
+            ->get(['kind', 'slug', 'title', 'is_private']);
+
+        $resolved = [];
+        foreach ($entries as $entry) {
+            if (! $viewer->seesPrivate() && $entry->is_private) {
+                continue;
+            }
+            $resolved[Sections::typeSlug($entry->kind).':'.$entry->slug] = ['title' => $entry->title];
+        }
+
+        return $resolved;
     }
 
     protected function card(Document $document): array
