@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\SessionStatus;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,20 +17,24 @@ use Illuminate\Support\Str;
  * post-play analysis lives separately in a {@see Recap}, one per session.
  *
  * @property-read Campaign $campaign
+ * @property-read Arc|null $arc
  * @property-read Recap|null $recap
  * @property-read Collection<int, User> $attendees
+ * @property-read Collection<int, SessionBeat> $beats
  */
 class Session extends Model
 {
     protected $table = 'campaign_sessions';
 
-    protected $fillable = ['campaign_id', 'title', 'slug', 'summary', 'body', 'held_on', 'sort', 'is_private'];
+    protected $fillable = ['campaign_id', 'arc_id', 'title', 'slug', 'summary', 'quest', 'body', 'held_on', 'sort', 'is_private', 'status'];
 
     protected $casts = [
         'campaign_id' => 'int',
+        'arc_id' => 'int',
         'held_on' => 'date',
         'sort' => 'int',
         'is_private' => 'boolean',
+        'status' => SessionStatus::class,
     ];
 
     protected static function booted(): void
@@ -52,6 +57,12 @@ class Session extends Model
         return $this->belongsTo(Campaign::class);
     }
 
+    /** The narrative arc this session sits under, or null when it hasn't been placed in one. */
+    public function arc(): BelongsTo
+    {
+        return $this->belongsTo(Arc::class);
+    }
+
     /** @return HasOne<Recap, $this> */
     public function recap(): HasOne
     {
@@ -68,5 +79,11 @@ class Session extends Model
     public function notes(): HasMany
     {
         return $this->hasMany(SessionNote::class)->chaperone();
+    }
+
+    /** The session's key moments, in play order. @return HasMany<SessionBeat, $this> */
+    public function beats(): HasMany
+    {
+        return $this->hasMany(SessionBeat::class)->chaperone();
     }
 }

@@ -11,6 +11,7 @@ const links = computed(() => [
     { label: 'Billing', href: route('admin.billing.index'), active: route().current('admin.billing.*') },
     { label: 'AI usage', href: route('admin.ai-usage.index'), active: route().current('admin.ai-usage.*') },
     { label: 'Global attributes', href: route('admin.attributes.index'), active: route().current('admin.attributes.*') },
+    { label: 'Rule systems', href: route('admin.rule-systems.index'), active: route().current('admin.rule-systems.*') },
 ]);
 </script>
 

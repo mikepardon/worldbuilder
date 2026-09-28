@@ -84,6 +84,34 @@ class Sections
         ], self::KINDS);
     }
 
+    /**
+     * The kind → family grouping for the World Bible's radial browser. Reuses the reader
+     * {@see self::SECTIONS} so both agree, and sweeps any kind without a section into a catch-all
+     * "Other" family so nothing is hidden from the wheel.
+     *
+     * @return list<array{slug: string, label: string, kinds: list<string>}>
+     */
+    public static function families(): array
+    {
+        $families = collect(self::SECTIONS)
+            ->map(fn (array $section): array => [
+                'slug' => $section['slug'],
+                'label' => $section['label'],
+                'kinds' => $section['kinds'],
+            ])
+            ->values()
+            ->all();
+
+        $grouped = collect(self::SECTIONS)->pluck('kinds')->flatten()->all();
+        $ungrouped = collect(self::KINDS)->diff($grouped)->values()->all();
+
+        if ($ungrouped !== []) {
+            $families[] = ['slug' => 'other', 'label' => 'Other', 'kinds' => $ungrouped];
+        }
+
+        return $families;
+    }
+
     /** The section slug a given kind belongs to. */
     public static function sectionForKind(string $kind): ?array
     {

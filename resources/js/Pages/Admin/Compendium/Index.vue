@@ -19,6 +19,9 @@ const runImport = (source) => {
     });
 };
 
+// Worldbuilder sources are hand-authored: create a blank entry and jump straight into editing it.
+const newEntry = (source) => router.post(route('admin.compendium.items.store', source.id));
+
 const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
 const statusCls = (s) => ({ complete: 'text-teal', running: 'text-amber', failed: 'text-red-400' })[s] ?? 'text-faint';
 </script>
@@ -47,7 +50,8 @@ const statusCls = (s) => ({ complete: 'text-teal', running: 'text-amber', failed
                         <td class="text-muted">{{ s.items_count }}</td>
                         <td class="text-faint">{{ when(s.last_run_at) }}</td>
                         <td class="text-right">
-                            <button class="btn-ghost !py-1 !text-xs" :disabled="importing.includes(s.id)" @click="runImport(s)">
+                            <button v-if="['ascendancy', 'worldbuilder'].includes(s.provider)" class="btn-ghost !py-1 !text-xs" @click="newEntry(s)">+ New entry</button>
+                            <button v-else class="btn-ghost !py-1 !text-xs" :disabled="importing.includes(s.id)" @click="runImport(s)">
                                 {{ importing.includes(s.id) ? 'Importing…' : (s.items_count ? 'Update' : 'Import') }}
                             </button>
                         </td>

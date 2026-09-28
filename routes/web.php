@@ -6,15 +6,17 @@ use App\Http\Controllers\Admin\BillingController as AdminBilling;
 use App\Http\Controllers\Admin\CampaignsController as AdminCampaigns;
 use App\Http\Controllers\Admin\CompendiumController as AdminCompendium;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboard;
+use App\Http\Controllers\Admin\RuleSystemController as AdminRuleSystems;
 use App\Http\Controllers\Admin\UsersController as AdminUsers;
 use App\Http\Controllers\AiController;
 use App\Http\Controllers\AiRequestController;
-use App\Http\Controllers\Settings\CreateApiToken;
-use App\Http\Controllers\Settings\DeleteApiToken;
+use App\Http\Controllers\ArcController;
 use App\Http\Controllers\ArticleNoteController;
+use App\Http\Controllers\BeatController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\CampaignController;
+use App\Http\Controllers\CharacterBuildController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\CompendiumController;
 use App\Http\Controllers\DashboardController;
@@ -45,26 +47,35 @@ use App\Http\Controllers\RoomSearchController;
 use App\Http\Controllers\RoomTemplateController;
 use App\Http\Controllers\RoomTokenController;
 use App\Http\Controllers\RoomTrackerController;
+use App\Http\Controllers\RuleSystemController;
 use App\Http\Controllers\SandboxController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SessionController;
 use App\Http\Controllers\SessionNoteController;
 use App\Http\Controllers\SessionUploadController;
+use App\Http\Controllers\Settings\CreateApiToken;
+use App\Http\Controllers\Settings\DeleteApiToken;
 use App\Http\Controllers\StorageController;
 use App\Http\Controllers\StripeWebhookController;
+use App\Http\Controllers\TalentAiController;
+use App\Http\Controllers\TalentEdgeController;
+use App\Http\Controllers\TalentNodeController;
+use App\Http\Controllers\TalentWebController;
 use App\Http\Controllers\UserNoteController;
 use App\Http\Controllers\WebhookController;
 use App\Http\Controllers\WorldAttributeController;
+use App\Http\Controllers\WorldBlockController;
 use App\Http\Controllers\WorldBuildController;
 use App\Http\Controllers\WorldController;
 use App\Http\Controllers\WorldDomainController;
 use App\Http\Controllers\WorldIngestionController;
 use App\Http\Controllers\WorldMemberController;
+use App\Http\Controllers\WorldRuleSystemController;
 use App\Http\Controllers\WorldSessionController;
-use App\Http\Controllers\WorldBlockController;
 use App\Http\Controllers\WorldTemplateController;
 use App\Http\Middleware\EnforceReaderPassword;
+use App\Models\Session;
 use Illuminate\Support\Facades\Route;
 
 // Stripe webhooks (public, no session/CSRF — verified by signature in the controller).
@@ -248,6 +259,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/documents/{document}/image', [DocumentController::class, 'clearImage'])->name('documents.image.clear');
     Route::delete('/documents/{document}', [DocumentController::class, 'destroy'])->name('documents.destroy');
     Route::post('/documents/{document}/ai', [AiController::class, 'ask'])->name('documents.ai');
+    // Queued Muse draft for the brew editor: returns an AiRequest handle to poll, applied straight into the page.
+    Route::post('/documents/{document}/ai/draft', [AiController::class, 'brewDraft'])->name('documents.ai.draft');
     Route::post('/documents/{document}/draft', [AiController::class, 'draft'])->name('documents.draft');
     Route::post('/documents/{document}/ai/bloodline', [AiController::class, 'bloodline'])->name('documents.ai.bloodline');
     Route::post('/documents/{document}/write-up', [DocumentController::class, 'writeUp'])->name('documents.writeup');
@@ -299,23 +312,38 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/campaigns/{campaign}/recap-guidance', [CampaignController::class, 'updateRecapGuidance'])->name('campaigns.recap-guidance');
     Route::delete('/campaigns/{campaign}', [CampaignController::class, 'destroy'])->name('campaigns.destroy');
 
+    // Narrative arcs (campaign board): the top lane grouping sessions.
+    Route::post('/campaigns/{campaign}/arcs', [ArcController::class, 'store'])->name('arcs.store');
+    Route::put('/campaigns/{campaign}/arcs/order', [ArcController::class, 'reorder'])->name('arcs.reorder');
+    Route::put('/arcs/{arc}', [ArcController::class, 'update'])->name('arcs.update');
+    Route::delete('/arcs/{arc}', [ArcController::class, 'destroy'])->name('arcs.destroy');
+
     // Sessions (campaign)
     Route::get('/worlds/{world}/sessions', [WorldSessionController::class, 'index'])->name('worlds.sessions');
     Route::post('/campaigns/{campaign}/sessions', [SessionController::class, 'store'])->name('sessions.store');
+    Route::patch('/sessions/{session}/organise', [SessionController::class, 'organise'])->name('sessions.organise');
+
+    // Session key moments (beats) — the campaign board's session panel.
+    Route::post('/sessions/{session}/beats', [BeatController::class, 'store'])->name('beats.store');
+    Route::put('/sessions/{session}/beats/order', [BeatController::class, 'reorder'])->name('beats.reorder');
+    Route::put('/beats/{beat}', [BeatController::class, 'update'])->name('beats.update');
+    Route::delete('/beats/{beat}', [BeatController::class, 'destroy'])->name('beats.destroy');
     Route::put('/sessions/{session}/details', [SessionController::class, 'details'])->name('sessions.details');
     Route::get('/sessions/{session}/view', [SessionController::class, 'view'])->name('sessions.view');
     // The GM session editor lives under its world/campaign so it carries the world nav and a consistent URL.
     Route::get('/worlds/{world}/campaigns/{campaign}/sessions/{session}/edit', [SessionController::class, 'edit'])->scopeBindings()->name('sessions.edit');
     // Legacy flat URL redirects to the nested canonical one (keeps old links/bookmarks working).
-    Route::get('/sessions/{session}/edit', fn (\App\Models\Session $session) => redirect()->route('sessions.edit', [$session->campaign->world_id, $session->campaign_id, $session->id]));
+    Route::get('/sessions/{session}/edit', fn (Session $session) => redirect()->route('sessions.edit', [$session->campaign->world_id, $session->campaign_id, $session->id]));
     Route::put('/sessions/{session}', [SessionController::class, 'update'])->name('sessions.update');
     Route::post('/sessions/{session}/ai', [SessionController::class, 'ask'])->name('sessions.ai');
+    // Queued Muse draft for the session editor: returns an AiRequest handle to poll, applied straight into the body.
+    Route::post('/sessions/{session}/ai/draft', [SessionController::class, 'draft'])->name('sessions.ai.draft');
     Route::delete('/sessions/{session}', [SessionController::class, 'destroy'])->name('sessions.destroy');
 
     // Session recap: the post-play analysis. Audio uploads direct-to-S3 via the multipart signing
     // endpoints, then `store` records it and queues the analysis; the recap page polls `status`.
     Route::get('/worlds/{world}/campaigns/{campaign}/sessions/{session}/recap', [RecapController::class, 'show'])->scopeBindings()->name('sessions.recap.show');
-    Route::get('/sessions/{session}/recap', fn (\App\Models\Session $session) => redirect()->route('sessions.recap.show', [$session->campaign->world_id, $session->campaign_id, $session->id]));
+    Route::get('/sessions/{session}/recap', fn (Session $session) => redirect()->route('sessions.recap.show', [$session->campaign->world_id, $session->campaign_id, $session->id]));
     Route::post('/sessions/{session}/recap', [RecapController::class, 'store'])->name('sessions.recap.store');
     Route::post('/sessions/{session}/recap/text', [RecapController::class, 'storeText'])->name('sessions.recap.text');
     Route::post('/sessions/{session}/recap/retry', [RecapController::class, 'retry'])->name('sessions.recap.retry');
@@ -351,6 +379,45 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/characters/{character}/refresh', [CharacterController::class, 'refresh'])->name('characters.refresh');
     Route::post('/characters/{character}/image', [CharacterController::class, 'uploadImage'])->name('characters.image');
     Route::delete('/characters/{character}', [CharacterController::class, 'destroy'])->name('characters.destroy');
+
+    // Custom TTRPG rule systems (stats, skills, spells, talent webs). A world's own systems live here;
+    // the global template library is under /admin. The builder and its web/node/edge endpoints are
+    // shared by both and gated by RuleSystemPolicy (admins bypass for templates via Gate::before).
+    Route::get('/worlds/{world}/rule-systems', [WorldRuleSystemController::class, 'index'])->name('rule-systems.index');
+    Route::post('/worlds/{world}/rule-systems', [WorldRuleSystemController::class, 'store'])->name('rule-systems.store');
+    Route::post('/worlds/{world}/rule-systems/clone/{template}', [WorldRuleSystemController::class, 'clone'])->name('rule-systems.clone');
+    Route::put('/campaigns/{campaign}/rule-system', [WorldRuleSystemController::class, 'assign'])->name('campaigns.rule-system');
+    Route::delete('/rule-systems/{ruleSystem}', [WorldRuleSystemController::class, 'destroy'])->name('rule-systems.destroy');
+
+    Route::get('/rule-systems/{ruleSystem}/build', [RuleSystemController::class, 'builder'])->name('rule-systems.build');
+    Route::put('/rule-systems/{ruleSystem}', [RuleSystemController::class, 'update'])->name('rule-systems.update');
+    Route::post('/rule-systems/{ruleSystem}/import-compendium', [RuleSystemController::class, 'importCompendium'])->name('rule-systems.import-compendium');
+
+    Route::post('/rule-systems/{ruleSystem}/webs', [TalentWebController::class, 'store'])->name('talent-webs.store');
+    Route::put('/talent-webs/{web}', [TalentWebController::class, 'update'])->name('talent-webs.update');
+    Route::delete('/talent-webs/{web}', [TalentWebController::class, 'destroy'])->name('talent-webs.destroy');
+    Route::post('/talent-webs/{web}/nodes', [TalentNodeController::class, 'store'])->name('talent-nodes.store');
+    Route::post('/talent-webs/{web}/cluster', [TalentNodeController::class, 'cluster'])->name('talent-nodes.cluster');
+    Route::put('/talent-webs/{web}/positions', [TalentNodeController::class, 'positions'])->name('talent-nodes.positions');
+    Route::post('/talent-webs/{web}/arrange', [TalentNodeController::class, 'arrange'])->name('talent-nodes.arrange');
+    Route::put('/talent-nodes/{node}', [TalentNodeController::class, 'update'])->name('talent-nodes.update');
+    Route::delete('/talent-nodes/{node}', [TalentNodeController::class, 'destroy'])->name('talent-nodes.destroy');
+    Route::post('/talent-webs/{web}/edges', [TalentEdgeController::class, 'store'])->name('talent-edges.store');
+    Route::delete('/talent-edges/{edge}', [TalentEdgeController::class, 'destroy'])->name('talent-edges.destroy');
+
+    // Muse: an AI assistant that proposes nodes for a web (chat spends a credit; apply persists them).
+    Route::post('/talent-webs/{web}/ai/chat', [TalentAiController::class, 'chat'])->name('talent-ai.chat');
+    Route::post('/talent-webs/{web}/ai/apply', [TalentAiController::class, 'apply'])->name('talent-ai.apply');
+
+    // A player builds their character against the campaign's rule system.
+    Route::get('/worlds/{world}/campaigns/{campaign}/characters/{character}/build', [CharacterBuildController::class, 'show'])->scopeBindings()->name('character-build.show');
+    Route::post('/characters/{character}/build/allocate', [CharacterBuildController::class, 'allocate'])->name('character-build.allocate');
+    Route::post('/characters/{character}/build/deallocate', [CharacterBuildController::class, 'deallocate'])->name('character-build.deallocate');
+    Route::post('/characters/{character}/build/enhance', [CharacterBuildController::class, 'enhance'])->name('character-build.enhance');
+    Route::post('/characters/{character}/build/option', [CharacterBuildController::class, 'chooseOption'])->name('character-build.option');
+    Route::post('/characters/{character}/build/choices', [CharacterBuildController::class, 'chooseChoices'])->name('character-build.choices');
+    Route::post('/characters/{character}/build/respec', [CharacterBuildController::class, 'respec'])->name('character-build.respec');
+    Route::put('/characters/{character}/build/settings', [CharacterBuildController::class, 'settings'])->name('character-build.settings');
 
     // Players, invites, membership (campaign)
     Route::get('/campaigns/{campaign}/players', [MembersController::class, 'index'])->name('players.index');
@@ -463,6 +530,7 @@ Route::middleware(['auth', 'can:access-admin'])->prefix('admin')->name('admin.')
 
     Route::get('/compendium', [AdminCompendium::class, 'index'])->name('compendium.index');
     Route::post('/compendium/sources/{source}/import', [AdminCompendium::class, 'import'])->name('compendium.import');
+    Route::post('/compendium/sources/{source}/items', [AdminCompendium::class, 'store'])->name('compendium.items.store');
     Route::get('/compendium/sources/{source}', [AdminCompendium::class, 'show'])->name('compendium.show');
     Route::get('/compendium/items/{item}/edit', [AdminCompendium::class, 'edit'])->name('compendium.items.edit');
     Route::put('/compendium/items/{item}', [AdminCompendium::class, 'update'])->name('compendium.items.update');
@@ -478,6 +546,11 @@ Route::middleware(['auth', 'can:access-admin'])->prefix('admin')->name('admin.')
     Route::get('/attributes', [AdminAttributes::class, 'index'])->name('attributes.index');
     Route::post('/attributes', [AdminAttributes::class, 'store'])->name('attributes.store');
     Route::put('/attributes/{attribute}', [AdminAttributes::class, 'update'])->name('attributes.update');
+
+    // Global rule-system template library. The builder itself is a shared route outside this group.
+    Route::get('/rule-systems', [AdminRuleSystems::class, 'index'])->name('rule-systems.index');
+    Route::post('/rule-systems', [AdminRuleSystems::class, 'store'])->name('rule-systems.store');
+    Route::delete('/rule-systems/{ruleSystem}', [AdminRuleSystems::class, 'destroy'])->name('rule-systems.destroy');
     Route::delete('/attributes/{attribute}', [AdminAttributes::class, 'destroy'])->name('attributes.destroy');
 });
 

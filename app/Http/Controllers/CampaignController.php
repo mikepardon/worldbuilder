@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\Arc;
 use App\Models\Campaign;
+use App\Models\Session;
+use App\Models\SessionBeat;
 use App\Models\World;
 use App\Support\WorldNav;
 use Illuminate\Http\JsonResponse;
@@ -107,15 +110,36 @@ class CampaignController extends Controller
                 'name' => $member->user?->name,
                 'role' => $member->role,
             ]),
-            'sessions' => $campaign->sessions()->orderByDesc('sort')->orderByDesc('id')->get()
-                ->map(fn ($session) => [
+            'arcs' => $campaign->arcs()->orderBy('sort')->orderBy('id')->withCount('sessions')->get()
+                ->map(fn (Arc $arc) => [
+                    'id' => $arc->id,
+                    'title' => $arc->title,
+                    'slug' => $arc->slug,
+                    'summary' => $arc->summary,
+                    'status' => $arc->status->value,
+                    'sort' => $arc->sort,
+                    'sessions_count' => $arc->sessions_count,
+                ]),
+            'sessions' => $campaign->sessions()
+                ->with(['beats' => fn ($query) => $query->orderBy('sort')->orderBy('id')])
+                ->orderBy('sort')->orderBy('id')->get()
+                ->map(fn (Session $session) => [
                     'id' => $session->id,
                     'title' => $session->title,
                     'slug' => $session->slug,
                     'summary' => $session->summary,
+                    'quest' => $session->quest,
                     'body' => $session->body,
                     'held_on' => $session->held_on?->toDateString(),
                     'is_private' => $session->is_private,
+                    'arc_id' => $session->arc_id,
+                    'status' => $session->status->value,
+                    'beats' => $session->beats->map(fn (SessionBeat $beat) => [
+                        'id' => $beat->id,
+                        'kind' => $beat->kind,
+                        'body' => $beat->body,
+                        'sort' => $beat->sort,
+                    ]),
                 ]),
             'rooms' => $campaign->rooms()->withCount(['members', 'tokens'])->latest()->get()
                 ->map(fn ($room) => [

@@ -90,6 +90,39 @@ class World extends Model
         return filled($value) ? (string) $value : null;
     }
 
+    /**
+     * Sensible starting travel modes for the map route tool: a label and how far it covers per day,
+     * measured in kilometres. The GM can replace these in world settings.
+     *
+     * @var list<array{name: string, per_day: float}>
+     */
+    public const DEFAULT_TRAVEL_MODES = [
+        ['name' => 'On foot', 'per_day' => 40.0],
+        ['name' => 'On horseback', 'per_day' => 50.0],
+        ['name' => 'By wagon', 'per_day' => 30.0],
+    ];
+
+    /**
+     * The travel modes offered by a map's route-measure tool — each a label and a distance-per-day in
+     * kilometres. Blank names and non-positive speeds are dropped (reject by default); an empty set
+     * falls back to {@see self::DEFAULT_TRAVEL_MODES}.
+     *
+     * @return list<array{name: string, per_day: float}>
+     */
+    public function travelModes(): array
+    {
+        $modes = collect((array) data_get($this->settings, 'travel_modes'))
+            ->map(fn ($mode): array => [
+                'name' => trim((string) data_get($mode, 'name', '')),
+                'per_day' => (float) data_get($mode, 'per_day', 0),
+            ])
+            ->filter(fn (array $mode): bool => $mode['name'] !== '' && $mode['per_day'] > 0)
+            ->values()
+            ->all();
+
+        return $modes === [] ? self::DEFAULT_TRAVEL_MODES : $modes;
+    }
+
     /** The detail level new recaps default to (brief or comprehensive). */
     public function defaultRecapDetail(): string
     {
@@ -114,7 +147,7 @@ class World extends Model
     public const READER_THEMES = ['teal', 'amber', 'crimson', 'violet', 'emerald', 'sky', 'rose'];
 
     /** Suggested game systems offered by the new-world wizard (the GM may also type their own). */
-    public const GAME_SYSTEMS = ['D&D 5e', 'Pathfinder 2e', 'Call of Cthulhu', 'Powered by the Apocalypse', 'System-agnostic'];
+    public const GAME_SYSTEMS = ['Ascendancy', 'D&D 5e', 'Pathfinder 2e', 'Call of Cthulhu', 'Powered by the Apocalypse', 'System-agnostic'];
 
     /**
      * Features the new-world wizard asks about, recorded as the GM's intent for the world.
@@ -461,6 +494,12 @@ class World extends Model
     public function campaigns(): HasMany
     {
         return $this->hasMany(Campaign::class);
+    }
+
+    /** @return HasMany<RuleSystem, $this> */
+    public function ruleSystems(): HasMany
+    {
+        return $this->hasMany(RuleSystem::class);
     }
 
     /** @return HasMany<Webhook, $this> */

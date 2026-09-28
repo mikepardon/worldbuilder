@@ -26,7 +26,8 @@ const props = defineProps({
     allTags: { type: Array, default: () => [] },
     // Route names so the same editor can drive documents or sessions.
     updateRoute: { type: String, default: "documents.update" },
-    aiRoute: { type: String, default: "documents.ai" },
+    // Queued Muse draft endpoint — replies apply straight into the page body (see send()).
+    draftRoute: { type: String, default: "documents.ai.draft" },
     backRoute: { type: String, default: "worlds.show" },
     // Route params for the back link. Defaults to the campaign id; nested routes pass [world, campaign].
     backParams: { type: [Array, Number, String], default: null },
@@ -392,24 +393,67 @@ const send = async (promptText) => {
     await nextTick(() => chatBottom.value?.scrollIntoView());
     try {
         const res = await window.axios.post(
-            route(props.aiRoute, props.document.id),
+            route(props.draftRoute, props.document.id),
             {
                 prompt: text,
                 content: form.content,
                 history,
             },
         );
-        messages.value.push({ role: "assistant", content: res.data.reply });
+        // The queued path returns a handle to poll; a sync queue returns the finished result directly.
+        const result =
+            res.data.status === "done"
+                ? res.data.result
+                : await pollAiRequest(res.data.id);
+
+        const undo = applyDraft(result);
+        messages.value.push({
+            role: "assistant",
+            content: result.reply || (undo ? "Updated the page." : ""),
+            applied: !!undo,
+            undo,
+        });
     } catch (e) {
         captureError(e);
-        chatError.value = e.response?.data?.message ?? "The AI request failed.";
+        chatError.value =
+            e.response?.data?.message ?? e.message ?? "The AI request failed.";
     } finally {
         asking.value = false;
         await nextTick(() => chatBottom.value?.scrollIntoView());
     }
 };
-const applyReply = (content) => {
-    form.content = content ?? "";
+
+// Poll a queued AI generation until the worker finishes it (or it fails / times out). The window
+// matches the job's own 15-minute ceiling: a multi-page draft is continued across several model
+// calls, so a legitimate generation can run for a few minutes.
+async function pollAiRequest(uuid) {
+    for (let i = 0; i < 450; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const { data } = await window.axios.get(route("ai.requests.show", uuid));
+        if (data.status === "done") return data.result;
+        if (data.status === "failed")
+            throw new Error(data.error || "The AI request failed.");
+    }
+    throw new Error("The AI request took too long. Please try again.");
+}
+
+// Write a draft straight into the page body — append or replace — returning an undo snapshot.
+const applyDraft = (result) => {
+    const content =
+        typeof result?.content === "string" ? result.content : "";
+    if (!content.trim()) return undefined;
+    const undo = { content: form.content };
+    form.content =
+        result.mode === "append" && form.content.trim()
+            ? `${form.content.replace(/\s+$/, "")}\n\n${content}`
+            : content;
+    return undo;
+};
+const undoDraft = (message) => {
+    if (!message.undo) return;
+    form.content = message.undo.content;
+    message.applied = false;
+    message.undo = undefined;
 };
 const clearChat = () => {
     messages.value = [];
@@ -987,7 +1031,9 @@ const writeUp = async () => {
                     <div class="flex-1 space-y-3 overflow-auto p-4">
                         <p v-if="!messages.length" class="text-sm text-faint">
                             Ask {{ aiName }} to expand a scene, invent an NPC,
-                            or build a stat block — it can see this page.
+                            or build a stat block — it writes changes straight
+                            into this page and keeps the chat for questions and
+                            refining.
                         </p>
                         <div v-for="(m, i) in messages" :key="i">
                             <div
@@ -998,19 +1044,28 @@ const writeUp = async () => {
                             </div>
                             <div v-else class="mr-2">
                                 <div
+                                    v-if="m.content"
                                     class="prose prose-sm prose-invert max-w-none text-sm text-ink"
                                     v-html="renderMd(m.content)"
                                 />
-                                <button
-                                    class="mt-1 text-xs text-teal hover:underline"
-                                    @click="applyReply(m.content)"
+                                <div
+                                    v-if="m.applied"
+                                    class="mt-1 flex items-center gap-2 text-xs"
                                 >
-                                    Replace page with this ↧
-                                </button>
+                                    <span class="text-[#9dc47a]"
+                                        >✓ Applied to the page</span
+                                    >
+                                    <button
+                                        class="text-faint underline hover:text-ink"
+                                        @click="undoDraft(m)"
+                                    >
+                                        Undo
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <p v-if="asking" class="text-sm text-faint">
-                            Thinking…
+                            Writing… a multi-page draft can take a few minutes.
                         </p>
                         <p v-if="chatError" class="text-sm text-red-400">
                             {{ chatError }}

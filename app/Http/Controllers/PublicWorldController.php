@@ -550,6 +550,7 @@ class PublicWorldController extends Controller
             'image_url' => $map->image->url,
             'real_width' => $map->real_width,
             'distance_unit' => $map->distance_unit,
+            'travel_modes' => $document->world->travelModes(),
             'pins' => $map->pins->map(fn (MapPin $pin): array => [
                 'x' => $pin->x,
                 'y' => $pin->y,
@@ -780,6 +781,9 @@ class PublicWorldController extends Controller
             'id' => $map->id, 'name' => $map->name, 'slug' => $map->slug, 'image_url' => $map->image?->url,
             'grid_visible' => $map->grid_visible, 'grid_size' => $map->grid_size,
             'unit_size' => $map->unit_size, 'unit' => $map->unit,
+            // Real-world scale + travel modes power the route tool's distance and travel-time readout.
+            'real_width' => $map->real_width, 'distance_unit' => $map->distance_unit,
+            'travel_modes' => $world->travelModes(),
             'fog_enabled' => $map->fog_enabled, 'fog' => $map->fog ?? [],
             'location' => $location,
             'pins' => $pins,

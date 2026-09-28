@@ -6,10 +6,12 @@ namespace App\Services;
 
 use App\Ai\Agents\AssistantAgent;
 use App\Support\AiModels;
+use App\Support\AiReply;
 use App\Support\AiUsage;
 use App\Support\AiUsageContext;
 use Laravel\Ai\Exceptions\AiException;
 use Laravel\Ai\Exceptions\ProviderConnectionException;
+use Laravel\Ai\Responses\Data\FinishReason;
 use RuntimeException;
 use Throwable;
 
@@ -50,6 +52,18 @@ class AnthropicClient
      * @param  list<array{role: string, content: string}>  $messages
      */
     public function chat(string $system, array $messages, int $maxTokens = 1500, ?AiUsageContext $usage = null, int $timeout = 60): string
+    {
+        return $this->chatReply($system, $messages, $maxTokens, $usage, $timeout)->text;
+    }
+
+    /**
+     * Like {@see chat()}, but also reports whether the reply was cut off by the output-token budget,
+     * so long generations (multi-page brew drafts) can be continued in a follow-up call instead of
+     * silently arriving truncated.
+     *
+     * @param  list<array{role: string, content: string}>  $messages
+     */
+    public function chatReply(string $system, array $messages, int $maxTokens = 1500, ?AiUsageContext $usage = null, int $timeout = 60): AiReply
     {
         if (! $this->configured()) {
             throw new RuntimeException("AI isn't set up on this server yet.");
@@ -106,6 +120,10 @@ class AnthropicClient
             }
         }
 
-        return $response->text;
+        return new AiReply(
+            $response->text,
+            // The Anthropic gateway maps stop_reason "max_tokens" to Length on the final step.
+            $response->steps->last()?->finishReason === FinishReason::Length,
+        );
     }
 }

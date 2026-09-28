@@ -14,6 +14,7 @@ use App\Services\AnthropicClient;
 use App\Services\CompendiumDrafter;
 use App\Services\CritterDbClient;
 use App\Services\Open5eClient;
+use App\Services\WorldCompendiumImporter;
 use App\Support\Compendium;
 use App\Support\CreditWeights;
 use App\Support\CompendiumFields;
@@ -135,51 +136,11 @@ class CompendiumController extends Controller
             'ids.*' => ['integer'],
         ]);
 
-        $sources = CompendiumItem::query()->whereIn('id', $data['ids'])->with('source')->get();
-        $imported = $refreshed = 0;
+        $result = app(WorldCompendiumImporter::class)->importItems($world, $data['ids'], $request->user()->id);
 
-        foreach ($sources as $source) {
-            $content = [
-                'name' => $source->name,
-                'summary' => $source->summary,
-                'document' => $source->document,
-                'fields' => $source->fields,
-                'data' => $source->data,
-                'source_item_id' => $source->id,
-                'origin' => $source->source?->provider, // open5e | dnd5eapi | …
-            ];
-
-            $existing = $world->compendiumItems()
-                ->where('item_type', $source->item_type)
-                ->where('slug', $source->slug)
-                ->first();
-
-            if ($existing) {
-                // Re-importing refreshes an existing imported copy from the (possibly updated) library,
-                // but never clobbers an editable custom/cloned entry the GM has made.
-                if ($existing->provider === 'imported') {
-                    $existing->update($content);
-                    $refreshed++;
-                }
-
-                continue;
-            }
-
-            $world->compendiumItems()->create([
-                'user_id' => $request->user()->id,
-                'item_type' => $source->item_type,
-                'slug' => $source->slug,
-                ...$content,
-                'provider' => 'imported',
-                'is_private' => false,
-                'is_active' => true,
-            ]);
-            $imported++;
-        }
-
-        $message = "{$imported} ".Str::plural('entry', $imported).' imported from the library.';
-        if ($refreshed > 0) {
-            $message .= " {$refreshed} refreshed.";
+        $message = "{$result['imported']} ".Str::plural('entry', $result['imported']).' imported from the library.';
+        if ($result['refreshed'] > 0) {
+            $message .= " {$result['refreshed']} refreshed.";
         }
 
         return back()->with('success', $message);
@@ -329,6 +290,13 @@ class CompendiumController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name', 'summary', 'document', 'fields'])
                 ->map(fn ($spell) => ['id' => $spell->id, 'name' => $spell->name, 'summary' => $spell->summary, 'document' => $spell->document, 'fields' => $spell->fields ?? []])
+                ->all(),
+            // Spells, feats and abilities a race can grant — picked into its "Granted" field.
+            'grantOptions' => $world->compendiumItems()
+                ->whereIn('item_type', ['spell', 'feat', 'ability'])
+                ->orderBy('name')
+                ->get(['id', 'name', 'item_type', 'summary'])
+                ->map(fn ($entry) => ['id' => $entry->id, 'name' => $entry->name, 'item_type' => $entry->item_type, 'summary' => $entry->summary])
                 ->all(),
             'ai' => [
                 'configured' => app(AnthropicClient::class)->configured(),

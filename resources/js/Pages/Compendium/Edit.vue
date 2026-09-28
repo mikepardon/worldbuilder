@@ -9,6 +9,7 @@ const props = defineProps({
     allTags: { type: Array, default: () => [] },
     races: { type: Array, default: () => [] },
     spells: { type: Array, default: () => [] },
+    grantOptions: { type: Array, default: () => [] },
     fieldSchema: { type: Array, default: () => [] },
     ai: { type: Object, default: () => ({ configured: false, remaining: 0, limit: 0 }) },
 });
@@ -23,6 +24,7 @@ const props = defineProps({
             :all-tags="allTags"
             :races="races"
             :spells="spells"
+            :grant-options="grantOptions"
             :field-schema="fieldSchema"
             :ai="ai"
             :back-href="route('compendium.index', campaign.id)"

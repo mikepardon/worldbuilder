@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\SessionStatus;
+use App\Jobs\DraftBrewPage;
+use App\Models\AiRequest;
 use App\Models\Campaign;
 use App\Models\CampaignCompendiumItem;
 use App\Models\Character;
@@ -20,6 +23,8 @@ use App\Support\WorldNav;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -37,7 +42,44 @@ class SessionController extends Controller
         $data = $this->validated($request);
         // New sessions inherit the world's "GM-only by default" setting unless the request says otherwise.
         $data['is_private'] ??= $campaign->world->newSessionsPrivate();
+
+        // Optional placement into one of the campaign's own arcs (ignored if it isn't one).
+        $arcId = $request->integer('arc_id') ?: null;
+        $data['arc_id'] = $arcId !== null && $campaign->arcs()->whereKey($arcId)->exists() ? $arcId : null;
+
         $campaign->sessions()->create($data);
+
+        return back();
+    }
+
+    /** Board action from the campaign page: place a session in an arc and set its play status. */
+    public function organise(Request $request, Session $session)
+    {
+        $this->authorize('manage', $session->campaign);
+
+        $data = $request->validate([
+            'arc_id' => ['present', 'nullable', 'integer'],
+            'status' => ['sometimes', Rule::enum(SessionStatus::class)],
+            'sort' => ['sometimes', 'integer'],
+            'quest' => ['sometimes', 'nullable', 'string', 'max:2000'],
+        ]);
+
+        // A session may only join an arc in its own campaign; anything else clears the placement.
+        $arcId = $data['arc_id'] !== null ? (int) $data['arc_id'] : null;
+        $update = [
+            'arc_id' => $arcId !== null && $session->campaign->arcs()->whereKey($arcId)->exists() ? $arcId : null,
+        ];
+        if (array_key_exists('status', $data)) {
+            $update['status'] = $data['status'];
+        }
+        if (array_key_exists('sort', $data)) {
+            $update['sort'] = $data['sort'];
+        }
+        if (array_key_exists('quest', $data)) {
+            $update['quest'] = $data['quest'];
+        }
+
+        $session->update($update);
 
         return back();
     }
@@ -236,6 +278,56 @@ class SessionController extends Controller
         $user->spendAiCredits($creditCost);
 
         return response()->json(['reply' => $reply, 'creditsRemaining' => $user->aiCreditsRemaining()]);
+    }
+
+    /**
+     * Start a Muse draft for a session write-up on the queue. The model call runs in {@see DraftBrewPage}
+     * (off the web request, so multi-page output can't hit the gateway timeout); this returns a handle the
+     * editor polls via {@see AiRequestController::show()}. The result is applied straight into the editor's
+     * body — replace or append — rather than pasted into the chat. Billed by the job on success.
+     */
+    public function draft(Request $request, Session $session, AnthropicClient $ai): JsonResponse
+    {
+        $this->authorize('manage', $session->campaign);
+
+        $input = $request->validate([
+            'prompt' => ['required', 'string', 'max:8000'],
+            'content' => ['nullable', 'string'],
+            'history' => ['nullable', 'array', 'max:40'],
+            'history.*.role' => ['required_with:history', 'in:user,assistant'],
+            'history.*.content' => ['required_with:history', 'string'],
+        ]);
+
+        if (! $ai->configured()) {
+            return response()->json(['message' => "AI isn't set up on this server yet."], 422);
+        }
+
+        $user = $request->user();
+        $creditCost = CreditWeights::forFeature('session_writeup', 'session');
+        if (! $user->canSpendAiCredits($creditCost)) {
+            return response()->json([
+                'message' => 'You’re out of AI credits for today — they reset daily. Top up or upgrade for more.',
+                'outOfCredits' => true,
+            ], 402);
+        }
+
+        $world = $session->campaign->world;
+        $aiRequest = AiRequest::create([
+            'uuid' => (string) Str::uuid(),
+            'user_id' => $user->id,
+            'feature' => 'session_draft',
+            'status' => 'pending',
+        ]);
+
+        dispatch(new DraftBrewPage(
+            $aiRequest, $user->id, $creditCost, $input['prompt'],
+            $input['content'] ?? $session->body ?? '', $input['history'] ?? [],
+            $session->title, 'session recap', $world->name, $world->setting,
+            new AiUsageContext('session_writeup', $world->id, $user->id, 'session'),
+        ));
+
+        // Reflect DB truth: with a sync queue the job has already run; on a real queue it's still pending.
+        return response()->json($aiRequest->refresh()->toStatusArray(), 202);
     }
 
     public function destroy(Session $session)

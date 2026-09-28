@@ -13,6 +13,7 @@ class Compendium
         'condition' => ['label' => 'Condition', 'plural' => 'Conditions'],
         'race' => ['label' => 'Race', 'plural' => 'Races'],
         'feat' => ['label' => 'Feat', 'plural' => 'Feats'],
+        'ability' => ['label' => 'Ability', 'plural' => 'Abilities'],
     ];
 
     /** Friendly names for where an imported entry came from ({@see CampaignCompendiumItem::$origin}). */
@@ -21,6 +22,8 @@ class Compendium
         'critterdb' => 'CritterDB',
         'open5e' => 'Open5e',
         'dnd5eapi' => 'D&D 5e API',
+        'worldbuilder' => 'Ascendancy',
+        'ascendancy' => 'Ascendancy',
     ];
 
     public static function keys(): array

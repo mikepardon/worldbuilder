@@ -3,6 +3,9 @@ import { computed, ref } from 'vue';
 
 const props = defineProps({
     options: { type: Array, default: () => [] }, // {id, name, summary}
+    placeholder: { type: String, default: 'Add a spell — type it, or pick from the compendium' },
+    // When true, only existing compendium entries can be added (no free-typed custom names).
+    compendiumOnly: { type: Boolean, default: false },
 });
 const emit = defineEmits(['add']);
 
@@ -22,10 +25,12 @@ const pick = (option) => {
 };
 
 // Enter adds an exact compendium match if there is one, otherwise the typed text as a custom spell.
+// In compendium-only mode a name with no match is ignored (nothing to link to).
 const addTyped = () => {
     const name = query.value.trim();
     if (!name) return;
     const exact = props.options.find((o) => o.name.toLowerCase() === name.toLowerCase());
+    if (!exact && props.compendiumOnly) return;
     emit('add', exact ? { name: exact.name, id: exact.id } : { name });
     query.value = '';
     open.value = false;
@@ -37,7 +42,7 @@ const addTyped = () => {
         <input
             v-model="query"
             class="field !py-1 text-[13px]"
-            placeholder="Add a spell — type it, or pick from the compendium"
+            :placeholder="placeholder"
             @focus="open = true"
             @input="open = true"
             @keydown.enter.prevent="addTyped"

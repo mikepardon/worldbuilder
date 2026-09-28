@@ -12,6 +12,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             CompendiumSourceSeeder::class,
+            WorldbuilderContentSeeder::class,
             GlobalAttributeSeeder::class,
         ]);
 
@@ -29,6 +30,9 @@ class DatabaseSeeder extends Seeder
             'password' => Hash::make('password'),
             'email_verified_at' => now(),
         ]);
+
+        // The "Ascendancy" starter, published as a global template GMs can clone into their world.
+        $this->call(TtrpgSystemSeeder::class);
 
         // The read-only demo world every new GM can explore and clone into their own campaign.
         $this->call(SandboxWorldSeeder::class);

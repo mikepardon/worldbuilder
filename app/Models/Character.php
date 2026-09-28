@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 /**
@@ -17,18 +19,22 @@ use Illuminate\Support\Str;
  * @property-read Campaign $campaign
  * @property-read User|null $owner
  * @property-read Media|null $image
+ * @property-read CampaignCompendiumItem|null $raceItem
+ * @property-read Collection<int, CharacterBuild> $builds
  */
 class Character extends Model
 {
     protected $fillable = [
         'campaign_id', 'user_id', 'image_media_id', 'name', 'slug', 'ddb_character_id', 'ddb_url', 'ddb_unreadable',
-        'level', 'class', 'race', 'speed', 'passive_perception', 'ac', 'hp', 'max_hp', 'stats', 'sheet', 'notes',
+        'level', 'class', 'race', 'race_compendium_item_id', 'speed', 'passive_perception', 'ac', 'hp', 'max_hp',
+        'stats', 'sheet', 'notes',
     ];
 
     protected $casts = [
         'campaign_id' => 'int',
         'user_id' => 'int',
         'image_media_id' => 'int',
+        'race_compendium_item_id' => 'int',
         'ddb_unreadable' => 'boolean',
         'level' => 'int',
         'speed' => 'int',
@@ -84,9 +90,21 @@ class Character extends Model
         return $this->belongsTo(Campaign::class);
     }
 
+    /** @return HasMany<CharacterBuild, $this> */
+    public function builds(): HasMany
+    {
+        return $this->hasMany(CharacterBuild::class)->chaperone();
+    }
+
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /** The chosen race from the world's compendium, if any. (Compendium items are not soft-deleted.) */
+    public function raceItem(): BelongsTo
+    {
+        return $this->belongsTo(CampaignCompendiumItem::class, 'race_compendium_item_id');
     }
 
     public function image(): BelongsTo

@@ -1,6 +1,8 @@
 <script setup>
 import ConnectionGraph from "@/Components/ConnectionGraph.vue";
+import WorldWheel from "@/Components/WorldWheel.vue";
 import WorldLayout from "@/Layouts/WorldLayout.vue";
+import { colourFor } from "@/lib/kindColours";
 import { Head, router } from "@inertiajs/vue3";
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 
@@ -8,23 +10,16 @@ const props = defineProps({
     world: Object,
     campaign: Object,
     graph: Object,
+    families: { type: Array, default: () => [] },
 });
 
-const KIND_COLOURS = {
-    article: "#c9a94e",
-    location: "#4e91c9",
-    npc: "#c96f4e",
-    faction: "#8a4ec9",
-    timeline: "#4ec9a0",
-    item: "#c9c14e",
-    rule: "#7d8590",
-    session: "#c94e8a",
-    quest: "#c9834e",
-    lore: "#4ec96f",
-    spell: "#4e6fc9",
-    statblock: "#b0554e",
+// "categories" is the calm radial browser (default); "connections" is the full force-directed web.
+const view = ref("categories");
+// From the categories view, "View connections" on an entry jumps to the web focused on that node.
+const focusInConnections = (id) => {
+    view.value = "connections";
+    setFocus(id);
 };
-const colourFor = (kind) => KIND_COLOURS[kind] ?? "#4e91c9";
 
 const REL_LABELS = {
     related_to: "Related to",
@@ -184,7 +179,7 @@ const linkedCount = computed(
 </script>
 
 <template>
-    <Head title="Connections web" />
+    <Head title="World Bible" />
 
     <WorldLayout :world="world">
         <div class="flex items-end justify-between gap-5">
@@ -197,7 +192,7 @@ const linkedCount = computed(
                 <div
                     class="font-display text-[32px] leading-[1.05] text-bright"
                 >
-                    Connections web
+                    World Bible
                 </div>
             </div>
             <div class="font-mono text-[11px] text-faint">
@@ -206,6 +201,36 @@ const linkedCount = computed(
             </div>
         </div>
 
+        <!-- View switch: the calm radial browser, or the full connections web -->
+        <div class="flex gap-1 rounded-md border border-edge3 p-0.5 self-start">
+            <button
+                v-for="mode in [
+                    { key: 'categories', label: 'Categories' },
+                    { key: 'connections', label: 'Connections' },
+                ]"
+                :key="mode.key"
+                class="rounded px-3 py-1 text-sm transition"
+                :class="
+                    view === mode.key
+                        ? 'bg-raised text-ink'
+                        : 'text-muted hover:text-ink'
+                "
+                @click="view = mode.key"
+            >
+                {{ mode.label }}
+            </button>
+        </div>
+
+        <WorldWheel
+            v-if="view === 'categories'"
+            :world="world"
+            :families="families"
+            :nodes="graph.nodes"
+            @open="openEntry"
+            @focus="focusInConnections"
+        />
+
+        <template v-if="view === 'connections'">
         <!-- Toolbar: search + focus/overview -->
         <div class="flex flex-wrap items-center gap-2">
             <div class="relative">
@@ -395,5 +420,6 @@ const linkedCount = computed(
                 </div>
             </aside>
         </div>
+        </template>
     </WorldLayout>
 </template>

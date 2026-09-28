@@ -56,5 +56,22 @@ class CompendiumSourceSeeder extends Seeder
                 ],
             );
         }
+
+        // The hand-authored "Ascendancy" library for each type — no external SRD to pull from, so admins
+        // create and edit these entries directly. This is where types with no SRD feed (e.g. abilities)
+        // live, and where the platform's own content is curated for worlds to adopt. (The internal source
+        // key stays "worldbuilder-*" so existing content keeps its home; only the display name changes.)
+        foreach (array_keys(Compendium::TYPES) as $itemType) {
+            CompendiumSource::updateOrCreate(
+                ['key' => "worldbuilder-{$itemType}"],
+                [
+                    'name' => (Compendium::TYPES[$itemType]['plural'] ?? ucfirst($itemType)).' (ascendancy)',
+                    'provider' => 'ascendancy',
+                    'item_type' => $itemType,
+                    'api_url' => '', // hand-authored — nothing to import
+                    'enabled' => true,
+                ],
+            );
+        }
     }
 }

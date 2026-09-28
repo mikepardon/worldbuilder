@@ -71,6 +71,14 @@ return [
         'players.*',
         'join.*',
 
+        // Custom TTRPG rule systems, talent webs & the player character builder
+        'rule-systems.*',
+        'talent-webs.*',
+        'talent-nodes.*',
+        'talent-edges.*',
+        'talent-ai.*',
+        'character-build.*',
+
         // Recaps & entity linking
         'recap.*',
 

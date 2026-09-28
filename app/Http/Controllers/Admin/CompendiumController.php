@@ -15,6 +15,7 @@ use App\Support\Compendium;
 use App\Support\CompendiumFields;
 use App\Support\Statblock;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Throwable;
 
@@ -49,9 +50,30 @@ class CompendiumController extends Controller
         ]);
     }
 
+    /** Create a blank entry in a source and open it for editing (for hand-authored Worldbuilder content). */
+    public function store(CompendiumSource $source)
+    {
+        $item = $source->items()->create([
+            'item_type' => $source->item_type,
+            'name' => 'New entry',
+            'slug' => 'new-entry-'.Str::lower(Str::random(6)),
+            'summary' => '',
+            'document' => '',
+            'fields' => $source->item_type === 'monster' ? ['block' => Statblock::empty()] : [],
+            'visible' => true,
+            'version' => 1,
+        ]);
+
+        return redirect()->route('admin.compendium.items.edit', $item);
+    }
+
     /** Pull the source's SRD listing into the global library (synchronous, paginated). */
     public function import(CompendiumSource $source)
     {
+        if (in_array($source->provider, ['ascendancy', 'worldbuilder'], true)) {
+            return back()->with('error', 'Ascendancy compendiums are hand-authored — add entries with “New entry”.');
+        }
+
         // Self-heal: an earlier synchronous import that timed out mid-fetch leaves a run stuck at
         // "running". Fail off any stale run for this source before starting a fresh one.
         $source->runs()
@@ -77,6 +99,7 @@ class CompendiumController extends Controller
                 'id' => $source->id,
                 'name' => $source->name,
                 'item_type' => $source->item_type,
+                'provider' => $source->provider,
                 'typeLabel' => Compendium::label($source->item_type),
             ],
             'items' => $source->items()->orderBy('name')->get()
@@ -85,7 +108,7 @@ class CompendiumController extends Controller
                     'name' => $i->name,
                     'slug' => $i->slug,
                     'summary' => $i->summary,
-                    'meta' => Open5eClient::preview($source->item_type, $i->data ?? [])['meta'],
+                    'meta' => CompendiumFields::meta($source->item_type, $i->fields ?? []) ?: Open5eClient::preview($source->item_type, $i->data ?? [])['meta'],
                     'version' => $i->version,
                 ]),
         ]);

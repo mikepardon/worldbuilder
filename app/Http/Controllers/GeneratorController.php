@@ -17,6 +17,7 @@ use App\Support\Generators;
 use App\Support\ItemBlock;
 use App\Support\Sections;
 use App\Support\Statblock;
+use App\Support\WikiLinks;
 use App\Support\WorldContext;
 use App\Support\WorldNav;
 use Illuminate\Http\JsonResponse;
@@ -212,6 +213,9 @@ class GeneratorController extends Controller
             'summary' => Str::limit(trim((string) ($data['detail'] ?? '')), 250, ''),
             'is_private' => false,
         ]);
+
+        // Mirror any [[wiki-links]] in the generated prose into the connection graph.
+        WikiLinks::sync($document);
 
         return redirect()->route('documents.edit', $document);
     }

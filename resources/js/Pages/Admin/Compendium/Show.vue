@@ -25,7 +25,16 @@ const shown = computed(() => {
         </div>
         <div class="flex items-end justify-between gap-4">
             <div class="font-display text-[32px] leading-[1.05] text-bright">{{ source.name }}</div>
-            <div class="font-mono text-[11px] text-faint">{{ shown.length }} of {{ items.length }} stored</div>
+            <div class="flex items-center gap-3">
+                <div class="font-mono text-[11px] text-faint">{{ shown.length }} of {{ items.length }} stored</div>
+                <button
+                    v-if="['ascendancy', 'worldbuilder'].includes(source.provider)"
+                    class="btn-primary !py-1.5 text-xs"
+                    @click="router.post(route('admin.compendium.items.store', source.id))"
+                >
+                    + New entry
+                </button>
+            </div>
         </div>
 
         <input v-model="q" class="field max-w-[360px]" placeholder="Search stored records…" />
@@ -40,7 +49,11 @@ const shown = computed(() => {
                         <td class="max-w-[420px] truncate text-faint">{{ i.summary }}</td>
                         <td class="text-faint">{{ i.version }}</td>
                     </tr>
-                    <tr v-if="!shown.length"><td colspan="4" class="py-10 text-center text-faint">Nothing stored yet — run an import.</td></tr>
+                    <tr v-if="!shown.length">
+                        <td colspan="4" class="py-10 text-center text-faint">
+                            {{ ['ascendancy', 'worldbuilder'].includes(source.provider) ? 'Nothing here yet — add an entry with “New entry”.' : 'Nothing stored yet — run an import.' }}
+                        </td>
+                    </tr>
                 </tbody>
             </table>
         </div>

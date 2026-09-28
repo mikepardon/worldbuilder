@@ -9,6 +9,18 @@ const props = defineProps({
 });
 
 const UNIT_LABELS = { feet: "Feet", yards: "Yards", miles: "Miles", km: "Km" };
+// Map distance units → kilometres, so per-day travel speeds (kept in km) work whatever unit the map uses.
+const UNIT_TO_KM = { feet: 0.0003048, yards: 0.0009144, miles: 1.609344, km: 1 };
+
+// A day count as a short, readable label: whole days, or hours once it drops below a day.
+const formatDuration = (days) => {
+    if (days >= 1) {
+        const whole = Math.round(days);
+        return `${whole.toLocaleString()} ${whole === 1 ? "day" : "days"}`;
+    }
+    const hours = Math.max(1, Math.round(days * 24));
+    return `${hours} ${hours === 1 ? "hr" : "hrs"}`;
+};
 
 const viewport = ref(null);
 const natW = ref(0);
@@ -65,36 +77,67 @@ const zoomButton = (factor) => {
     zoomAt(el.clientWidth / 2, el.clientHeight / 2, factor);
 };
 
-/* ---- measure tool ---- */
+/* ---- measure tool: a multi-point route, distance summed segment by segment ---- */
 const measuring = ref(false);
-const measure = ref(null); // { a: {px,py}, b: {px,py} }
-let measureDrag = false;
+const route = ref([]); // ordered [{ px, py }, ...] in image-natural coordinates
+let dragIndex = null; // the waypoint currently being dragged, or null
 const toggleMeasure = () => {
     measuring.value = !measuring.value;
-    if (!measuring.value) measure.value = null;
+    if (!measuring.value) route.value = [];
+};
+const clearRoute = () => {
+    route.value = [];
 };
 
-const distanceLabel = computed(() => {
-    if (!measure.value) return "";
-    const dpx = Math.hypot(
-        measure.value.b.px - measure.value.a.px,
-        measure.value.b.py - measure.value.a.py,
-    );
-    if (props.map.real_width && natW.value) {
-        const units = dpx * (Number(props.map.real_width) / natW.value);
-        const label = UNIT_LABELS[props.map.distance_unit] ?? "";
-        return `${Math.round(units).toLocaleString()} ${label}`.trim();
+const routePoints = computed(() =>
+    route.value.map((p) => `${p.px},${p.py}`).join(" "),
+);
+
+const routeDistancePx = computed(() => {
+    let total = 0;
+    for (let i = 1; i < route.value.length; i++) {
+        total += Math.hypot(
+            route.value[i].px - route.value[i - 1].px,
+            route.value[i].py - route.value[i - 1].py,
+        );
     }
-    return `${Math.round(dpx).toLocaleString()} px`;
+    return total;
 });
-const labelStyle = computed(() => {
-    if (!measure.value) return {};
-    const mx = (measure.value.a.px + measure.value.b.px) / 2;
-    const my = (measure.value.a.py + measure.value.b.py) / 2;
-    return {
-        left: `${view.tx + mx * view.scale}px`,
-        top: `${view.ty + my * view.scale}px`,
-    };
+
+// The route length in the map's real-world unit, or undefined when the map has no scale set.
+const distanceUnits = computed(() => {
+    if (!props.map.real_width || !natW.value) return undefined;
+    return routeDistancePx.value * (Number(props.map.real_width) / natW.value);
+});
+
+const distanceLabel = computed(() => {
+    if (route.value.length < 2) return "";
+    if (distanceUnits.value !== undefined) {
+        const label = UNIT_LABELS[props.map.distance_unit] ?? "";
+        return `${Math.round(distanceUnits.value).toLocaleString()} ${label}`.trim();
+    }
+    return `${Math.round(routeDistancePx.value).toLocaleString()} px`;
+});
+
+// Per-mode travel time for the current route, empty unless the map has a scale and configured modes.
+const travelTimes = computed(() => {
+    const modes = props.map.travel_modes;
+    const toKm = UNIT_TO_KM[props.map.distance_unit];
+    if (
+        !Array.isArray(modes) ||
+        modes.length === 0 ||
+        distanceUnits.value === undefined ||
+        !toKm
+    ) {
+        return [];
+    }
+    const km = distanceUnits.value * toKm;
+    return modes
+        .filter((mode) => Number(mode.per_day) > 0)
+        .map((mode) => ({
+            name: mode.name,
+            label: formatDuration(km / Number(mode.per_day)),
+        }));
 });
 
 /* ---- pan + pointer routing ---- */
@@ -102,8 +145,14 @@ let panDrag = null;
 const onDown = (event) => {
     if (measuring.value) {
         const p = toImagePx(event);
-        measure.value = { a: p, b: p };
-        measureDrag = true;
+        // First click seeds two points so a single drag draws a segment; later clicks add a waypoint.
+        // Either way you can drag the point you just placed to fine-tune it before releasing.
+        if (route.value.length === 0) {
+            route.value = [p, { ...p }];
+        } else {
+            route.value.push(p);
+        }
+        dragIndex = route.value.length - 1;
         viewport.value.setPointerCapture(event.pointerId);
         return;
     }
@@ -111,8 +160,8 @@ const onDown = (event) => {
     viewport.value.setPointerCapture(event.pointerId);
 };
 const onMove = (event) => {
-    if (measureDrag && measure.value) {
-        measure.value = { a: measure.value.a, b: toImagePx(event) };
+    if (dragIndex !== null) {
+        route.value[dragIndex] = toImagePx(event);
         return;
     }
     if (!panDrag) return;
@@ -120,7 +169,7 @@ const onMove = (event) => {
     view.ty = panDrag.ty + (event.clientY - panDrag.y);
 };
 const onUp = () => {
-    measureDrag = false;
+    dragIndex = null;
     panDrag = null;
 };
 
@@ -164,19 +213,29 @@ const openPinStyle = computed(() => {
                 @load="onImgLoad"
             />
 
-            <!-- Measure line (in image space so it pans/zooms with the map) -->
+            <!-- Measure route (in image space so it pans/zooms with the map) -->
             <svg
-                v-if="measure"
+                v-if="route.length"
                 class="pointer-events-none absolute left-0 top-0"
                 :width="natW"
                 :height="natH"
                 style="overflow: visible"
             >
-                <line
-                    :x1="measure.a.px"
-                    :y1="measure.a.py"
-                    :x2="measure.b.px"
-                    :y2="measure.b.py"
+                <polyline
+                    :points="routePoints"
+                    fill="none"
+                    stroke="#ef4444"
+                    :stroke-width="2 / view.scale"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                />
+                <circle
+                    v-for="(p, i) in route"
+                    :key="i"
+                    :cx="p.px"
+                    :cy="p.py"
+                    :r="5 / view.scale"
+                    fill="#fff"
                     stroke="#ef4444"
                     :stroke-width="2 / view.scale"
                 />
@@ -236,13 +295,53 @@ const openPinStyle = computed(() => {
             </button>
         </div>
 
-        <!-- Distance readout -->
+        <!-- Route readout: distance, and travel time per mode when the map has a real-world scale -->
         <div
-            v-if="measure && distanceLabel"
-            class="pointer-events-none absolute z-20 -translate-x-1/2 translate-y-2 whitespace-nowrap rounded bg-black/80 px-2 py-1 text-[13px] font-medium text-white shadow"
-            :style="labelStyle"
+            v-if="distanceLabel"
+            class="absolute bottom-3 right-3 z-20 w-48 rounded-lg border border-edge3 bg-surface/95 p-3 shadow-xl"
+            @pointerdown.stop
         >
-            {{ distanceLabel }}
+            <div
+                class="font-mono text-[9px] uppercase tracking-[0.16em] text-amber"
+            >
+                Distance
+            </div>
+            <div class="mt-1 font-display text-xl leading-none text-bright">
+                {{ distanceLabel }}
+            </div>
+
+            <template v-if="travelTimes.length">
+                <div
+                    class="mt-3 font-mono text-[9px] uppercase tracking-[0.16em] text-amber"
+                >
+                    Travel time
+                </div>
+                <div class="mt-1 font-display text-lg leading-none text-amber">
+                    {{ travelTimes[0].label }}
+                </div>
+                <div
+                    class="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-faint"
+                >
+                    {{ travelTimes[0].name }}
+                </div>
+                <div class="mt-2 flex flex-col gap-1">
+                    <div
+                        v-for="mode in travelTimes.slice(1)"
+                        :key="mode.name"
+                        class="flex items-baseline justify-between gap-2 text-[12px] text-muted"
+                    >
+                        <span>{{ mode.name }}</span>
+                        <b class="font-medium text-ink">{{ mode.label }}</b>
+                    </div>
+                </div>
+            </template>
+
+            <button
+                class="mt-3 font-mono text-[10px] uppercase tracking-wider text-faint hover:text-ink"
+                @click="clearRoute"
+            >
+                Clear route
+            </button>
         </div>
 
         <!-- Pin popup (opens beside the marker) -->
@@ -295,6 +394,12 @@ const openPinStyle = computed(() => {
                     <path d="m7.5 10.5 2 2M11 7l2 2M14.5 3.5l2 2M4 14l2 2" />
                 </svg>
             </button>
+            <span
+                v-if="measuring"
+                class="flex items-center rounded-md border border-edge3 bg-surface/95 px-2 text-[11px] text-muted shadow"
+            >
+                Click to add points
+            </span>
         </div>
 
         <!-- Zoom (bottom-left) -->

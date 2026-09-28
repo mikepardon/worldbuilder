@@ -26,6 +26,7 @@ const props = defineProps({
     allTags: { type: Array, default: () => [] },
     races: { type: Array, default: () => [] },
     spells: { type: Array, default: () => [] },
+    grantOptions: { type: Array, default: () => [] },
     fieldSchema: { type: Array, default: () => [] },
     ai: {
         type: Object,
@@ -65,9 +66,16 @@ const form = reactive({
 
 // Non-monster types edit structured fields: ensure each schema key exists, and seed the description
 // from any legacy freeform document so switching to the field editor loses nothing.
+const STRUCTURED_FIELD_TYPES = ["effects", "grants", "levels"];
 if (!isMonster.value && props.fieldSchema.length) {
     props.fieldSchema.forEach((field) => {
-        if (form.fields[field.key] === undefined) form.fields[field.key] = "";
+        const structured = STRUCTURED_FIELD_TYPES.includes(field.type);
+        if (form.fields[field.key] === undefined) {
+            form.fields[field.key] = structured ? [] : "";
+        } else if (structured && !Array.isArray(form.fields[field.key])) {
+            // A legacy/empty value where a list is expected — normalise so the widgets bind cleanly.
+            form.fields[field.key] = [];
+        }
     });
     if (!locked.value && !form.fields.description && props.item.document) {
         form.fields.description = props.item.document
@@ -75,6 +83,40 @@ if (!isMonster.value && props.fieldSchema.length) {
             .trim();
     }
 }
+
+/* ---- Structured list fields: race base modifiers + granted spells/feats ---- */
+const grantName = (id) =>
+    props.grantOptions.find((o) => o.id === id)?.name ?? `#${id}`;
+const addGrant = (key, event) => {
+    if (event.id && !form.fields[key].includes(event.id))
+        form.fields[key].push(event.id);
+};
+const removeGrant = (key, id) => {
+    form.fields[key] = form.fields[key].filter((x) => x !== id);
+};
+const addFieldEffect = (key) =>
+    form.fields[key].push({ type: "stat", key: "", delta: 1 });
+const removeFieldEffect = (key, i) => form.fields[key].splice(i, 1);
+
+/* ---- Spell ranks: a line of mana-costed levels a caster learns and casts from ---- */
+const addLevel = (key) => {
+    const levels = form.fields[key];
+    const nextLevel =
+        levels.reduce((max, l) => Math.max(max, Number(l.level ?? 0)), 0) + 1;
+    levels.push({
+        level: nextLevel,
+        mana: 0,
+        min_level: 0,
+        name: "",
+        casting_time: "",
+        range: "",
+        components: "",
+        targets: "",
+        duration: "",
+        description: "",
+    });
+};
+const removeLevel = (key, i) => form.fields[key].splice(i, 1);
 
 /* ---- Code view: an editable, live-synced buffer over the stored data ---- */
 // The entry's data exactly as it's stored: a monster's stat block or a structured type's fields as JSON,
@@ -1000,6 +1042,184 @@ const removeImage = () => {
                             :placeholder="f.placeholder"
                             class="field !py-2 text-[13.5px]"
                         />
+                        <div
+                            v-else-if="f.type === 'effects'"
+                            class="flex flex-col gap-1.5"
+                        >
+                            <div
+                                v-for="(effect, i) in form.fields[f.key]"
+                                :key="i"
+                                class="grid grid-cols-12 gap-1.5"
+                            >
+                                <select
+                                    v-model="effect.type"
+                                    class="field col-span-4 !py-1.5 text-[12.5px]"
+                                >
+                                    <option value="stat">stat</option>
+                                    <option value="resource">resource</option>
+                                    <option value="skill">skill</option>
+                                    <option value="derived">derived</option>
+                                </select>
+                                <input
+                                    v-model="effect.key"
+                                    placeholder="key e.g. dex"
+                                    class="field col-span-5 !py-1.5 text-[12.5px]"
+                                />
+                                <input
+                                    v-model.number="effect.delta"
+                                    type="number"
+                                    placeholder="Δ"
+                                    class="field col-span-2 !py-1.5 text-[12.5px]"
+                                />
+                                <button
+                                    type="button"
+                                    class="col-span-1 text-blood"
+                                    @click="removeFieldEffect(f.key, i)"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                            <button
+                                type="button"
+                                class="self-start text-xs text-amber"
+                                @click="addFieldEffect(f.key)"
+                            >
+                                + modifier
+                            </button>
+                            <p class="text-[11px] text-faint">
+                                Matched to the campaign's rule-system keys when a
+                                character is built; unknown keys are ignored.
+                            </p>
+                        </div>
+                        <div
+                            v-else-if="f.type === 'grants'"
+                            class="flex flex-col gap-2"
+                        >
+                            <div
+                                v-if="form.fields[f.key].length"
+                                class="flex flex-wrap gap-1.5"
+                            >
+                                <span
+                                    v-for="id in form.fields[f.key]"
+                                    :key="id"
+                                    class="flex items-center gap-1 rounded-full bg-raised px-2.5 py-0.5 text-[12px] text-ink"
+                                >
+                                    {{ grantName(id) }}
+                                    <button
+                                        type="button"
+                                        class="text-faint hover:text-blood"
+                                        @click="removeGrant(f.key, id)"
+                                    >
+                                        ✕
+                                    </button>
+                                </span>
+                            </div>
+                            <SpellPicker
+                                :options="grantOptions"
+                                compendium-only
+                                placeholder="Add a spell or feat…"
+                                @add="addGrant(f.key, $event)"
+                            />
+                        </div>
+                        <div
+                            v-else-if="f.type === 'levels'"
+                            class="flex flex-col gap-2"
+                        >
+                            <div
+                                v-for="(level, i) in form.fields[f.key]"
+                                :key="i"
+                                class="rounded border border-edge2 bg-night/40 p-2"
+                            >
+                                <div class="flex items-center gap-1.5">
+                                    <input
+                                        v-model.number="level.level"
+                                        type="number"
+                                        min="1"
+                                        class="field !w-14 !py-1 text-[12.5px]"
+                                        placeholder="Lv"
+                                    />
+                                    <input
+                                        v-model="level.name"
+                                        class="field min-w-0 flex-1 !py-1 text-[12.5px]"
+                                        placeholder="Rank name e.g. Firebolt"
+                                    />
+                                    <button
+                                        type="button"
+                                        class="shrink-0 text-blood"
+                                        @click="removeLevel(f.key, i)"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                                <div class="mt-1.5 grid grid-cols-2 gap-1.5">
+                                    <label
+                                        class="flex items-center gap-1.5 text-[11px] text-faint"
+                                    >
+                                        Mana
+                                        <input
+                                            v-model.number="level.mana"
+                                            type="number"
+                                            min="0"
+                                            class="field !py-1 text-[12.5px]"
+                                        />
+                                    </label>
+                                    <label
+                                        class="flex items-center gap-1.5 text-[11px] text-faint"
+                                    >
+                                        Min level
+                                        <input
+                                            v-model.number="level.min_level"
+                                            type="number"
+                                            min="0"
+                                            class="field !py-1 text-[12.5px]"
+                                        />
+                                    </label>
+                                    <input
+                                        v-model="level.casting_time"
+                                        class="field !py-1 text-[12.5px]"
+                                        placeholder="Casting time"
+                                    />
+                                    <input
+                                        v-model="level.range"
+                                        class="field !py-1 text-[12.5px]"
+                                        placeholder="Range"
+                                    />
+                                    <input
+                                        v-model="level.targets"
+                                        class="field !py-1 text-[12.5px]"
+                                        placeholder="Targets"
+                                    />
+                                    <input
+                                        v-model="level.components"
+                                        class="field !py-1 text-[12.5px]"
+                                        placeholder="Components"
+                                    />
+                                    <input
+                                        v-model="level.duration"
+                                        class="field col-span-2 !py-1 text-[12.5px]"
+                                        placeholder="Duration"
+                                    />
+                                </div>
+                                <textarea
+                                    v-model="level.description"
+                                    rows="2"
+                                    class="field mt-1.5 !py-1 text-[12.5px]"
+                                    placeholder="What this rank does…"
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                class="self-start text-xs text-amber"
+                                @click="addLevel(f.key)"
+                            >
+                                + rank
+                            </button>
+                            <p class="text-[11px] text-faint">
+                                Each rank costs its own mana; a caster may cast
+                                any rank they’ve learned. “Min level” gates the
+                                character level needed to learn that rank.
+                            </p>
+                        </div>
                         <input
                             v-else
                             v-model="form.fields[f.key]"

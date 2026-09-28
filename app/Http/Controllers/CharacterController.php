@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\SyncDdbCharacters;
 use App\Models\Campaign;
+use App\Models\CampaignCompendiumItem;
 use App\Models\Character;
 use App\Models\Media;
 use App\Models\User;
@@ -17,6 +18,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
@@ -42,12 +44,21 @@ class CharacterController extends Controller
         return Inertia::render('Characters/Index', [
             'world' => WorldNav::for($world),
             'campaign' => ['id' => $campaign->id, 'name' => $campaign->name],
+            // Whether this campaign has a rule system enabled, so characters can open the talent builder.
+            'talentsEnabled' => $campaign->rule_system_id !== null,
             'isGm' => $isGm,
             'me' => ['id' => $viewer->id, 'name' => $viewer->name],
             'characters' => $campaign->characters->sortBy('name')->values()
                 ->map(fn (Character $character) => $this->present($character, $viewer->id, $isGm)),
             // For the GM's "owner" picker: the campaign's people.
             'members' => $isGm ? $this->people($campaign) : [],
+            // Races from the world's compendium, offered when setting a character's race.
+            'raceOptions' => $world->compendiumItems()
+                ->where('item_type', 'race')
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn (CampaignCompendiumItem $race): array => ['id' => $race->id, 'name' => $race->name])
+                ->all(),
             // The viewer's personal characters they can attach to this campaign.
             'attachable' => Character::where('user_id', $viewer->id)->whereNull('campaign_id')
                 ->orderBy('name')->get(['id', 'name'])
@@ -139,11 +150,18 @@ class CharacterController extends Controller
     {
         $this->authorizeCharacter($request, $character);
 
+        // A race may be chosen from the character's world compendium; scope the id to that world.
+        $worldId = $character->campaign?->world_id;
+        $raceRule = $worldId === null
+            ? ['nullable', 'prohibited']
+            : ['nullable', 'integer', Rule::exists('campaign_compendium_items', 'id')->where('world_id', $worldId)->where('item_type', 'race')];
+
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:120'],
             'level' => ['nullable', 'integer', 'min:1', 'max:30'],
             'class' => ['nullable', 'string', 'max:120'],
             'race' => ['nullable', 'string', 'max:120'],
+            'race_compendium_item_id' => $raceRule,
             'ac' => ['nullable', 'integer', 'min:0'],
             'hp' => ['nullable', 'integer', 'min:0'],
             'max_hp' => ['nullable', 'integer', 'min:0'],
@@ -327,6 +345,7 @@ class CharacterController extends Controller
             'level' => $character->level,
             'class' => $character->class,
             'race' => $character->race,
+            'race_compendium_item_id' => $character->race_compendium_item_id,
             'speed' => $character->speed,
             'passive_perception' => $character->passive_perception,
             'ac' => $character->ac,

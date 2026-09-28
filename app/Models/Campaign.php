@@ -13,12 +13,13 @@ use Illuminate\Support\Str;
  * battle rooms run for it, and the player characters. It draws on the world's lore, compendium and maps.
  *
  * @property-read World $world
+ * @property-read RuleSystem|null $ruleSystem
  */
 class Campaign extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['world_id', 'name', 'slug', 'code', 'description', 'visibility', 'game_system', 'recap_facts', 'recap_instructions'];
+    protected $fillable = ['world_id', 'name', 'slug', 'code', 'description', 'visibility', 'game_system', 'rule_system_id', 'recap_facts', 'recap_instructions'];
 
     /** This campaign's game system, falling back to the world default. */
     public function gameSystem(): ?string
@@ -28,6 +29,7 @@ class Campaign extends Model
 
     protected $casts = [
         'world_id' => 'int',
+        'rule_system_id' => 'int',
         'recap_facts' => 'array',
         'recap_instructions' => 'array',
         // Carries a secret token; Laravel encrypts it at rest and decrypts on access.
@@ -72,6 +74,12 @@ class Campaign extends Model
         return $this->belongsTo(World::class);
     }
 
+    /** The rule system in play for this campaign, if the GM has enabled one. */
+    public function ruleSystem(): BelongsTo
+    {
+        return $this->belongsTo(RuleSystem::class);
+    }
+
     public function members(): HasMany
     {
         return $this->hasMany(CampaignMember::class);
@@ -95,6 +103,12 @@ class Campaign extends Model
     public function sessions(): HasMany
     {
         return $this->hasMany(Session::class);
+    }
+
+    /** @return HasMany<Arc, $this> */
+    public function arcs(): HasMany
+    {
+        return $this->hasMany(Arc::class)->chaperone();
     }
 
     /** @return HasMany<ScheduleEvent, $this> */

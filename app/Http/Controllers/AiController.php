@@ -1,7 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
+use App\Jobs\DraftBrewPage;
+use App\Models\AiRequest;
 use App\Models\Document;
 use App\Services\AnthropicClient;
 use App\Support\AiJson;
@@ -9,6 +13,7 @@ use App\Support\AiUsageContext;
 use App\Support\CreditWeights;
 use App\Support\DocFields;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Throwable;
 
 class AiController extends Controller
@@ -66,6 +71,57 @@ class AiController extends Controller
         $user->spendAiCredits($creditCost);
 
         return response()->json(['reply' => $reply, 'creditsRemaining' => $user->aiCreditsRemaining()]);
+    }
+
+    /**
+     * Start a Muse draft for a brew-style document page on the queue. The model call runs in
+     * {@see DraftBrewPage} (off the web request, so multi-page output can't hit the gateway timeout);
+     * this returns a handle the editor polls via {@see AiRequestController::show()}. The result is
+     * applied straight into the editor's document body — replace or append — rather than pasted into
+     * the chat. Credits are pre-checked here and billed by the job on success.
+     */
+    public function brewDraft(Request $request, Document $document, AnthropicClient $ai)
+    {
+        $this->authorize('update', $document);
+
+        $input = $request->validate([
+            'prompt' => ['required', 'string', 'max:8000'],
+            'content' => ['nullable', 'string'],
+            'history' => ['nullable', 'array', 'max:40'],
+            'history.*.role' => ['required_with:history', 'in:user,assistant'],
+            'history.*.content' => ['required_with:history', 'string'],
+        ]);
+
+        if (! $ai->configured()) {
+            return response()->json(['message' => "AI isn't set up on this server yet."], 422);
+        }
+
+        $user = $request->user();
+        $creditCost = CreditWeights::forFeature('assistant_draft', $document->kind);
+        if (! $user->canSpendAiCredits($creditCost)) {
+            return response()->json([
+                'message' => 'You’re out of AI credits for today — they reset daily. Top up or upgrade for more.',
+                'outOfCredits' => true,
+            ], 402);
+        }
+
+        $world = $document->world;
+        $aiRequest = AiRequest::create([
+            'uuid' => (string) Str::uuid(),
+            'user_id' => $user->id,
+            'feature' => 'brew_draft',
+            'status' => 'pending',
+        ]);
+
+        dispatch(new DraftBrewPage(
+            $aiRequest, $user->id, $creditCost, $input['prompt'],
+            $input['content'] ?? $document->content ?? '', $input['history'] ?? [],
+            $document->title, $document->kind, $world->name, $world->setting,
+            new AiUsageContext('assistant_draft', $world->id, $user->id, $document->kind),
+        ));
+
+        // Reflect DB truth: with a sync queue the job has already run; on a real queue it's still pending.
+        return response()->json($aiRequest->refresh()->toStatusArray(), 202);
     }
 
     /**

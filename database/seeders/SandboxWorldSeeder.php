@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Models\Campaign;
+use App\Models\Document;
 use App\Models\Media;
 use App\Models\User;
 use App\Models\World;
 use App\Models\WorldBlock;
 use App\Support\Statblock;
 use App\Support\TemplateBlocks;
+use App\Support\WikiLinks;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -43,7 +45,7 @@ class SandboxWorldSeeder extends Seeder
         ['grove-goblin', 40, 52],
         ['grove-goblin', 30, 60],
         ['gloom-lurker', 62, 46],
-        ['bog-ghast', 71, 58],
+        ['bog-ghast', 71, 58]
     ];
 
     /** Directed links that give the "web" graph its shape: [from slug, to slug, relationship]. */
@@ -215,6 +217,10 @@ class SandboxWorldSeeder extends Seeder
                 ]);
             }
         }
+
+        // Also mirror the [[wiki-links]] written into each entry's prose into the graph. Run after every
+        // document exists so titles resolve; sync only touches wiki-link edges, leaving the manual ones above.
+        $world->documents()->get()->each(fn (Document $document) => WikiLinks::sync($document));
     }
 
     /** @param  array<string, int>  $documents */

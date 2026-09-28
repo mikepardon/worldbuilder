@@ -1,17 +1,20 @@
 <script setup>
 import WorldLayout from "@/Layouts/WorldLayout.vue";
 import UppyUploader from "@/Components/UppyUploader.vue";
-import { Head, router, useForm } from "@inertiajs/vue3";
+import { Head, Link, router, useForm } from "@inertiajs/vue3";
 import { ref } from "vue";
 
 const props = defineProps({
     world: Object,
     campaign: Object,
+    talentsEnabled: { type: Boolean, default: false },
     isGm: Boolean,
     me: Object,
     characters: { type: Array, default: () => [] },
     members: { type: Array, default: () => [] },
     attachable: { type: Array, default: () => [] },
+    // Races from the world's compendium, offered when choosing a character's race.
+    raceOptions: { type: Array, default: () => [] },
     ddbReady: { type: Boolean, default: false },
 });
 
@@ -77,6 +80,7 @@ const save = () => {
             level: c.level,
             class: c.class,
             race: c.race,
+            race_compendium_item_id: c.race_compendium_item_id ?? null,
             speed: c.speed,
             passive_perception: c.passive_perception,
             ac: c.ac,
@@ -284,13 +288,23 @@ const onPortraitDone = () => router.reload({ preserveScroll: true });
                             >
                         </div>
                     </div>
-                    <button
-                        v-if="c.can_edit"
-                        class="shrink-0 text-sm text-faint hover:text-amber"
-                        @click="openEdit(c)"
-                    >
-                        Edit
-                    </button>
+                    <div class="flex shrink-0 flex-col items-end gap-1">
+                        <button
+                            v-if="c.can_edit"
+                            class="text-sm text-faint hover:text-amber"
+                            @click="openEdit(c)"
+                        >
+                            Edit
+                        </button>
+                        <Link
+                            v-if="talentsEnabled && c.can_edit"
+                            :href="route('character-build.show', [world.id, campaign.id, c.id])"
+                            class="text-sm text-teal hover:underline"
+                            @click.stop
+                        >
+                            Talents
+                        </Link>
+                    </div>
                 </div>
                 <p
                     v-if="!characters.length"
@@ -395,7 +409,16 @@ const onPortraitDone = () => router.reload({ preserveScroll: true });
                     /></label>
                     <label class="flex flex-col gap-1 text-xs text-faint"
                         >Race
+                        <select
+                            v-if="raceOptions.length"
+                            v-model="selected.race_compendium_item_id"
+                            class="field !py-2 text-sm"
+                        >
+                            <option :value="null">— none —</option>
+                            <option v-for="r in raceOptions" :key="r.id" :value="r.id">{{ r.name }}</option>
+                        </select>
                         <input
+                            v-else
                             v-model="selected.race"
                             class="field !py-2 text-sm"
                     /></label>

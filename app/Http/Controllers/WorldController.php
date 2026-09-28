@@ -219,6 +219,9 @@ class WorldController extends Controller
             'world' => WorldNav::for($world),
             'campaign' => ['id' => $world->id, 'name' => $world->name],
             'graph' => Connections::graph($world),
+            // The kind → family grouping powering the radial "Categories" browser (counts derived
+            // client-side from the graph nodes).
+            'families' => Sections::families(),
         ]);
     }
 
@@ -261,6 +264,10 @@ class WorldController extends Controller
             'nav_links' => ['sometimes', 'array', 'max:8'],
             'nav_links.*.label' => ['required', 'string', 'max:40'],
             'nav_links.*.url' => ['required', 'url', 'max:255'],
+            // Map route-tool travel modes: a label and a distance-per-day in kilometres.
+            'travel_modes' => ['sometimes', 'array', 'max:8'],
+            'travel_modes.*.name' => ['required', 'string', 'max:40'],
+            'travel_modes.*.per_day' => ['required', 'numeric', 'min:0.1', 'max:100000'],
             // The reader nav menu tree (WordPress-style). Deep-validated + sanitised via NavMenu below,
             // since arbitrary-depth trees can't be expressed with flat array rules.
             'nav_menu' => ['sometimes', 'array'],
@@ -291,7 +298,7 @@ class WorldController extends Controller
             'reader_analytics', 'reader_footer', 'reader_font', 'reader_home_layout', 'default_entry_private',
             'reader_bg', 'reader_heading', 'reader_text', 'reader_css',
             'support_url', 'support_label', 'reader_date_format', 'reader_number_sessions', 'default_join_role',
-            'nav_hidden', 'nav_order', 'nav_links',
+            'nav_hidden', 'nav_order', 'nav_links', 'travel_modes',
         ];
         foreach ($settingKeys as $key) {
             if (array_key_exists($key, $data)) {
@@ -332,6 +339,7 @@ class WorldController extends Controller
                 'default_game_system' => $world->defaultGameSystem(),
                 'default_recap_detail' => $world->defaultRecapDetail(),
                 'recap_auto_publish' => $world->recapAutoPublish(),
+                'travel_modes' => $world->travelModes(),
                 'reader_theme' => $world->readerTheme(),
                 'reader_analytics' => (string) data_get($world->settings, 'reader_analytics', ''),
                 // Whether a webhook is configured — the secret URL itself is never sent to the browser.

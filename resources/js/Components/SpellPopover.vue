@@ -17,6 +17,29 @@ const FACETS = [
 ];
 const facets = computed(() => FACETS.map(([label, key]) => ({ label, value: fields.value[key] })).filter((f) => f.value));
 
+// Ascendancy leveled spells: a line of ranks, each with its own mana cost and facets.
+const ranks = computed(() => {
+    const raw = fields.value.levels;
+    if (!Array.isArray(raw)) return [];
+    return raw
+        .filter((rank) => rank && rank.level !== undefined && rank.level !== '')
+        .map((rank) => ({
+            level: rank.level,
+            mana: rank.mana,
+            name: rank.name,
+            minLevel: Number(rank.min_level ?? 0),
+            facets: [
+                ['Casting', rank.casting_time],
+                ['Range', rank.range],
+                ['Targets', rank.targets],
+                ['Components', rank.components],
+                ['Duration', rank.duration],
+            ].filter(([, value]) => value),
+            description: rank.description,
+        }))
+        .sort((a, b) => Number(a.level) - Number(b.level));
+});
+
 // Subtitle like "3rd-level Evocation" / "Transmutation cantrip".
 const subtitle = computed(() => {
     const level = fields.value.level;
@@ -43,7 +66,7 @@ const bodyHtml = computed(() => {
 });
 
 // Imported entries can be name-only stubs — show a note rather than a blank card.
-const isEmpty = computed(() => facets.value.length === 0 && bodyHtml.value.trim() === '');
+const isEmpty = computed(() => facets.value.length === 0 && ranks.value.length === 0 && bodyHtml.value.trim() === '');
 </script>
 
 <template>
@@ -62,8 +85,22 @@ const isEmpty = computed(() => facets.value.length === 0 && bodyHtml.value.trim(
                     <div class="spell-card-facet-value">{{ f.value }}</div>
                 </div>
             </div>
+            <div v-if="ranks.length" class="spell-card-ranks">
+                <div v-for="rank in ranks" :key="rank.level" class="spell-card-rank">
+                    <div class="spell-card-rank-head">
+                        <span class="spell-card-rank-lv">L{{ rank.level }}</span>
+                        <span v-if="rank.name" class="spell-card-rank-name">{{ rank.name }}</span>
+                        <span v-if="rank.mana != undefined && rank.mana !== ''" class="spell-card-rank-mana">{{ rank.mana }} mana</span>
+                        <span v-if="rank.minLevel" class="spell-card-rank-req">lvl {{ rank.minLevel }}+</span>
+                    </div>
+                    <div v-if="rank.facets.length" class="spell-card-rank-facets">
+                        <span v-for="[label, value] in rank.facets" :key="label"><b>{{ label }}:</b> {{ value }}</span>
+                    </div>
+                    <div v-if="rank.description" class="spell-card-rank-desc">{{ rank.description }}</div>
+                </div>
+            </div>
             <div v-if="isEmpty" class="spell-card-body spell-card-empty">No details recorded for this spell yet.</div>
-            <div v-else class="spell-card-body" v-html="bodyHtml" />
+            <div v-else-if="bodyHtml.trim()" class="spell-card-body" v-html="bodyHtml" />
         </div>
     </Teleport>
 </template>
@@ -139,6 +176,58 @@ const isEmpty = computed(() => facets.value.length === 0 && bodyHtml.value.trim(
 .spell-card-facet-value {
     font-size: 15px;
     color: #2a2118;
+}
+.spell-card-ranks {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 16px;
+}
+.spell-card-rank {
+    border-left: 3px solid #7a200c;
+    padding-left: 10px;
+}
+.spell-card-rank-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+}
+.spell-card-rank-lv {
+    font-family: 'Cinzel', Georgia, serif;
+    font-weight: 700;
+    color: #58180d;
+}
+.spell-card-rank-name {
+    font-weight: 600;
+    color: #2a2118;
+}
+.spell-card-rank-mana {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: #3f5c8a;
+}
+.spell-card-rank-req {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 10.5px;
+    color: #8a7355;
+}
+.spell-card-rank-facets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 12px;
+    margin-top: 2px;
+    font-size: 12.5px;
+    color: #5a4a33;
+}
+.spell-card-rank-facets b {
+    color: #8a7355;
+    font-weight: 700;
+}
+.spell-card-rank-desc {
+    margin-top: 3px;
+    font-size: 13.5px;
 }
 .spell-card-body {
     padding: 12px 16px;

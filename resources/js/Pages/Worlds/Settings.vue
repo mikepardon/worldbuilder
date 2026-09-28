@@ -54,9 +54,17 @@ const form = useForm({
     default_entry_private: props.settings.default_entry_private,
     support_url: props.settings.support_url ?? "",
     support_label: props.settings.support_label ?? "",
+    travel_modes: (props.settings.travel_modes ?? []).map((mode) => ({
+        name: mode.name,
+        per_day: mode.per_day,
+    })),
 });
 const save = () =>
     form.put(route("worlds.update", props.world.id), { preserveScroll: true });
+
+const addTravelMode = () =>
+    form.travel_modes.push({ name: "", per_day: 30 });
+const removeTravelMode = (index) => form.travel_modes.splice(index, 1);
 
 // The Discord webhook is a secret, so it never round-trips to the browser: it has its own
 // form and the page only knows whether one is connected, not what it is.
@@ -1130,6 +1138,59 @@ const destroy = () => {
                             >
                         </span>
                     </label>
+
+                    <div class="border-t border-edge3 pt-3">
+                        <h3 class="text-sm text-bright">Map travel modes</h3>
+                        <p class="text-xs text-faint">
+                            When a map has a real-world width set, the route tool
+                            turns a measured distance into travel time. Speeds
+                            are kilometres covered per day.
+                        </p>
+                        <div class="mt-2 flex flex-col gap-2">
+                            <div
+                                v-for="(mode, i) in form.travel_modes"
+                                :key="i"
+                                class="flex items-center gap-2"
+                            >
+                                <input
+                                    v-model="mode.name"
+                                    class="field flex-1 !py-1.5 text-[13px]"
+                                    placeholder="e.g. On horseback"
+                                />
+                                <input
+                                    v-model.number="mode.per_day"
+                                    type="number"
+                                    min="0.1"
+                                    step="0.1"
+                                    class="field !w-24 !py-1.5 text-[13px]"
+                                    placeholder="km/day"
+                                />
+                                <span class="text-xs text-faint">km/day</span>
+                                <button
+                                    type="button"
+                                    class="text-faint hover:text-red-400"
+                                    title="Remove mode"
+                                    @click="removeTravelMode(i)"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                            <p
+                                v-if="!form.travel_modes.length"
+                                class="text-xs text-faint"
+                            >
+                                Using the defaults: On foot (40), On horseback
+                                (50), By wagon (30).
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            class="mt-2 text-xs text-teal hover:underline"
+                            @click="addTravelMode"
+                        >
+                            + Add travel mode
+                        </button>
+                    </div>
                 </section>
 
                 <div

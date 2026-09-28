@@ -89,6 +89,11 @@ const toolLinks = computed(() => [
         active: route().current("tables.*"),
     },
     {
+        label: "Rule systems",
+        href: route("rule-systems.index", props.world.id),
+        active: route().current("rule-systems.*"),
+    },
+    {
         label: "Calendars",
         href: route("calendars.index", props.world.id),
         active: route().current("calendars.*"),
