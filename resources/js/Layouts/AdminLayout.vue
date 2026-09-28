@@ -12,6 +12,7 @@ const links = computed(() => [
     { label: 'AI usage', href: route('admin.ai-usage.index'), active: route().current('admin.ai-usage.*') },
     { label: 'Global attributes', href: route('admin.attributes.index'), active: route().current('admin.attributes.*') },
     { label: 'Rule systems', href: route('admin.rule-systems.index'), active: route().current('admin.rule-systems.*') },
+    { label: 'Email', href: route('admin.mail.templates.index'), active: route().current('admin.mail.*') },
 ]);
 </script>
 

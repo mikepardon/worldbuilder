@@ -6,6 +6,9 @@ use App\Http\Controllers\Admin\BillingController as AdminBilling;
 use App\Http\Controllers\Admin\CampaignsController as AdminCampaigns;
 use App\Http\Controllers\Admin\CompendiumController as AdminCompendium;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboard;
+use App\Http\Controllers\Admin\MailCampaignsController as AdminMailCampaigns;
+use App\Http\Controllers\Admin\MailSubscribersController as AdminMailSubscribers;
+use App\Http\Controllers\Admin\MailTemplatesController as AdminMailTemplates;
 use App\Http\Controllers\Admin\RuleSystemController as AdminRuleSystems;
 use App\Http\Controllers\Admin\UsersController as AdminUsers;
 use App\Http\Controllers\AiController;
@@ -58,6 +61,7 @@ use App\Http\Controllers\Settings\CreateApiToken;
 use App\Http\Controllers\Settings\DeleteApiToken;
 use App\Http\Controllers\StorageController;
 use App\Http\Controllers\StripeWebhookController;
+use App\Http\Controllers\UnsubscribeController;
 use App\Http\Controllers\TalentAiController;
 use App\Http\Controllers\TalentEdgeController;
 use App\Http\Controllers\TalentNodeController;
@@ -80,6 +84,9 @@ use Illuminate\Support\Facades\Route;
 
 // Stripe webhooks (public, no session/CSRF — verified by signature in the controller).
 Route::post('/stripe/webhook', StripeWebhookController::class)->name('stripe.webhook');
+
+// Email unsubscribe — signed URL, no auth required.
+Route::get('/unsubscribe', UnsubscribeController::class)->name('unsubscribe');
 
 // Deepgram delivers finished transcripts here (public, no session/CSRF). The per-recap URL is signed, so
 // the `signed` middleware authenticates the caller; `relative` lets it validate behind a tunnel/proxy.
@@ -552,6 +559,25 @@ Route::middleware(['auth', 'can:access-admin'])->prefix('admin')->name('admin.')
     Route::post('/rule-systems', [AdminRuleSystems::class, 'store'])->name('rule-systems.store');
     Route::delete('/rule-systems/{ruleSystem}', [AdminRuleSystems::class, 'destroy'])->name('rule-systems.destroy');
     Route::delete('/attributes/{attribute}', [AdminAttributes::class, 'destroy'])->name('attributes.destroy');
+
+    // Email marketing
+    Route::get('/mail/templates', [AdminMailTemplates::class, 'index'])->name('mail.templates.index');
+    Route::post('/mail/templates', [AdminMailTemplates::class, 'store'])->name('mail.templates.store');
+    Route::get('/mail/templates/{emailTemplate}', [AdminMailTemplates::class, 'edit'])->name('mail.templates.edit');
+    Route::put('/mail/templates/{emailTemplate}', [AdminMailTemplates::class, 'update'])->name('mail.templates.update');
+    Route::delete('/mail/templates/{emailTemplate}', [AdminMailTemplates::class, 'destroy'])->name('mail.templates.destroy');
+    Route::post('/mail/templates/{emailTemplate}/test', [AdminMailTemplates::class, 'sendTest'])->name('mail.templates.test');
+    Route::post('/mail/templates/{emailTemplate}/generate', [AdminMailTemplates::class, 'generate'])->name('mail.templates.generate');
+
+    Route::get('/mail/campaigns', [AdminMailCampaigns::class, 'index'])->name('mail.campaigns.index');
+    Route::get('/mail/campaigns/create', [AdminMailCampaigns::class, 'create'])->name('mail.campaigns.create');
+    Route::post('/mail/campaigns/preview', [AdminMailCampaigns::class, 'previewAudience'])->name('mail.campaigns.preview');
+    Route::post('/mail/campaigns', [AdminMailCampaigns::class, 'store'])->name('mail.campaigns.store');
+    Route::get('/mail/campaigns/{emailCampaign}', [AdminMailCampaigns::class, 'show'])->name('mail.campaigns.show');
+
+    Route::get('/mail/subscribers', [AdminMailSubscribers::class, 'index'])->name('mail.subscribers.index');
+    Route::post('/mail/subscribers', [AdminMailSubscribers::class, 'store'])->name('mail.subscribers.store');
+    Route::delete('/mail/subscribers/{emailSubscriber}', [AdminMailSubscribers::class, 'destroy'])->name('mail.subscribers.destroy');
 });
 
 require __DIR__.'/auth.php';
